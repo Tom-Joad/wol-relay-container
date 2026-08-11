@@ -1,5 +1,12 @@
 FROM python:3.12-alpine
 
+# image.source is what makes the GHCR package inherit the repository's
+# visibility instead of staying private on its own.
+LABEL org.opencontainers.image.source="https://github.com/Tom-Joad/wol-relay-container" \
+      org.opencontainers.image.title="wol-relay-container" \
+      org.opencontainers.image.description="HTTP relay that sends Wake-on-LAN magic packets" \
+      org.opencontainers.image.licenses="MIT"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     WOL_LISTEN_PORT=8099

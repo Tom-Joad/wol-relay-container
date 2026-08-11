@@ -83,6 +83,28 @@ docker compose up -d --build
 macOS or Windows the container does not share the host's layer 2 segment and
 the broadcast will not reach the target.
 
+### Prebuilt image
+
+Every push to `main` builds and publishes `linux/amd64` and `linux/arm64`
+images to `ghcr.io/tom-joad/wol-relay-container`, tagged `latest` plus
+`sha-<commit>`; a `v*` tag additionally publishes the semver tags. Images carry
+a build provenance attestation and an SBOM, and are signed keylessly with
+cosign:
+
+```bash
+cosign verify ghcr.io/tom-joad/wol-relay-container:latest \
+  --certificate-identity-regexp "^https://github.com/Tom-Joad/wol-relay-container/" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+To deploy that image instead of building locally, swap `build: .` for the
+`image:` line in [docker-compose.yml](docker-compose.yml).
+
+The pipeline runs the test suite, a `pip-audit` dependency check and a gitleaks
+secret scan first — nothing reaches the registry unless all three pass. The
+built image is then scanned with Trivy, in report-only mode so a fresh
+base-image CVE cannot block a fix from shipping.
+
 ## Example request
 
 ```bash
