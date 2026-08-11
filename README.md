@@ -1,5 +1,7 @@
 # wol-relay-container
 
+[![Build and push image](https://github.com/Tom-Joad/wol-relay-container/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/Tom-Joad/wol-relay-container/actions/workflows/build-and-push.yml)
+
 A small HTTP relay that sends a Wake-on-LAN magic packet when it receives an
 authenticated request. Built as a trigger target for Home Assistant, but it is
 plain HTTP and works with anything that can issue a `POST`.
@@ -84,6 +86,10 @@ macOS or Windows the container does not share the host's layer 2 segment and
 the broadcast will not reach the target.
 
 ### Prebuilt image
+
+```bash
+docker pull ghcr.io/tom-joad/wol-relay-container:latest
+```
 
 Every push to `main` builds and publishes `linux/amd64` and `linux/arm64`
 images to `ghcr.io/tom-joad/wol-relay-container`, tagged `latest` plus
