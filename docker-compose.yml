@@ -1,0 +1,31 @@
+services:
+  wol-relay:
+    build: .
+    # Published images can be used instead of a local build:
+    # image: ghcr.io/tom-joad/wol-relay-container:latest
+    container_name: wol-relay
+    restart: unless-stopped
+
+    # The magic packet must reach the target's layer 2 segment, so the
+    # container shares the host's network stack. Linux hosts only.
+    network_mode: host
+
+    env_file:
+      - .env
+
+    # Everything below has a built-in default; env_file wins over these.
+    environment:
+      WOL_LISTEN_HOST: ${WOL_LISTEN_HOST:-0.0.0.0}
+      WOL_LISTEN_PORT: ${WOL_LISTEN_PORT:-8099}
+      WOL_PORT: ${WOL_PORT:-9}
+      WOL_LOG_LEVEL: ${WOL_LOG_LEVEL:-INFO}
+
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
