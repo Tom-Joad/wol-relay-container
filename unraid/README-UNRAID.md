@@ -31,7 +31,7 @@ woken, because the magic packet is a broadcast.
 ## Use
 
 ```bash
-curl -sS -X POST http://UNRAID_IP:8099/wol -H "X-Auth-Token: YOUR_SECRET"
+curl -sS -X POST http://UNRAID_IP:8099/wol -H "X-Auth-Token: $WOL_AUTH_TOKEN"
 ```
 
 For Home Assistant and the request format see the [main README](../README.md).
