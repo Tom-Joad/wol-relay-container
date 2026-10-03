@@ -1,0 +1,3 @@
+# Placeholder in a curl example (replaced by $WOL_AUTH_TOKEN in a later
+# commit); the fingerprint keeps the history scan of this pull request green.
+2a399b36ec436146e2ceedcb3c4a1b98e8321f12:unraid/README-UNRAID.md:curl-auth-header:34

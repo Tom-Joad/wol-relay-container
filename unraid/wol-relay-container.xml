@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>wol-relay-container</Name>
+  <Repository>ghcr.io/tom-joad/wol-relay-container:latest</Repository>
+  <Registry>https://ghcr.io</Registry>
+  <Network>host</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Tom-Joad/wol-relay-container</Support>
+  <Project>https://github.com/Tom-Joad/wol-relay-container</Project>
+  <TemplateURL>https://raw.githubusercontent.com/Tom-Joad/wol-relay-container/main/unraid/wol-relay-container.xml</TemplateURL>
+  <Overview>
+    Small HTTP relay that sends a Wake-on-LAN magic packet when it receives an authenticated POST,
+    for example from Home Assistant. Runs with host networking so the broadcast reaches the
+    target's network segment. No web UI and no stored data; activity is in the container log.
+  </Overview>
+  <Category>Tools: HomeAutomation:</Category>
+  <ExtraParams>--read-only --cap-drop ALL --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges</ExtraParams>
+  <Config Name="WOL_AUTH_TOKEN" Target="WOL_AUTH_TOKEN" Default="" Mode="" Description="Shared secret expected in the X-Auth-Token header. Generate one with: openssl rand -hex 32" Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="WOL_TARGET_MAC" Target="WOL_TARGET_MAC" Default="" Mode="" Description="Default target MAC address, e.g. aa:bb:cc:dd:ee:ff. Optional if callers send a mac in the request body." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="WOL_LISTEN_PORT" Target="WOL_LISTEN_PORT" Default="8099" Mode="" Description="HTTP port. The container uses host networking: this port opens on the Unraid host." Type="Variable" Display="always" Required="true" Mask="false"/>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User the relay runs as (nobody)" Type="Variable" Display="always" Required="true" Mask="false"/>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group the relay runs as (users)" Type="Variable" Display="always" Required="true" Mask="false"/>
+  <Config Name="TZ" Target="TZ" Default="Etc/UTC" Mode="" Description="Time zone for log time stamps, e.g. Europe/Berlin" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="WOL_ALLOW_BODY_MAC" Target="WOL_ALLOW_BODY_MAC" Default="true" Mode="" Description="false: refuse a mac in the request body and wake only WOL_TARGET_MAC" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="WOL_BROADCAST_ADDRESS" Target="WOL_BROADCAST_ADDRESS" Default="255.255.255.255" Mode="" Description="Broadcast destination; a subnet broadcast such as 192.168.1.255 also works" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="WOL_PORT" Target="WOL_PORT" Default="9" Mode="" Description="UDP port of the magic packet (typically 9 or 7)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="WOL_LISTEN_HOST" Target="WOL_LISTEN_HOST" Default="0.0.0.0" Mode="" Description="HTTP bind address" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="WOL_LOG_LEVEL" Target="WOL_LOG_LEVEL" Default="INFO" Mode="" Description="DEBUG, INFO, WARNING or ERROR" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>

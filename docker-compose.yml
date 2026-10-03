@@ -15,6 +15,12 @@ services:
 
     # Everything below has a built-in default; env_file wins over these.
     environment:
+      # linuxserver.io conventions: the container starts as root, the
+      # entrypoint switches to these IDs before the relay runs. Don't set
+      # `user:`. The relay writes no files, so any unprivileged ID will do.
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Etc/UTC}
       WOL_LISTEN_HOST: ${WOL_LISTEN_HOST:-0.0.0.0}
       WOL_LISTEN_PORT: ${WOL_LISTEN_PORT:-8099}
       WOL_PORT: ${WOL_PORT:-9}
@@ -23,6 +29,13 @@ services:
     read_only: true
     security_opt:
       - no-new-privileges:true
+
+    # Only what the entrypoint needs to switch to PUID:PGID.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
 
     logging:
       driver: json-file
