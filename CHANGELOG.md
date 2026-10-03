@@ -3,7 +3,10 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.0] - 2026-10-03
+
+First stable release. Settings, endpoints and the log format are now stable;
+a change that needs action when upgrading only comes with a new major version.
 
 ### Added
 - `PUID` and `PGID` (default 1000): the container starts as root, the
@@ -23,3 +26,5 @@ All notable changes to this project are listed here. Versions follow
   `PGID` if you relied on that ID.
 - CI: actions updated to their Node 24 releases; the test job gets
   `pull-requests: read` so gitleaks works on pull requests.
+
+[1.0.0]: https://github.com/Tom-Joad/wol-relay-container/releases/tag/v1.0.0
