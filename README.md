@@ -216,6 +216,14 @@ pip install -r requirements.txt pytest
 pytest
 ```
 
+A smoke test checks the built image with the same hardening as
+`docker-compose.yml` (read-only, capabilities dropped):
+
+```bash
+docker build -t wol-relay:dev .
+tests/smoke.sh wol-relay:dev
+```
+
 Run it locally without Docker:
 
 ```bash
