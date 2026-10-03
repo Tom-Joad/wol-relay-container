@@ -1,7 +1,7 @@
 """Structured (JSON lines) logging to stdout.
 
-Every record carries a UTC timestamp, a level and a short event name. Secrets
-are never passed to the logger: the auth token is compared but never logged,
+Every record carries a timestamp (local time per TZ, with offset), a level
+and a short event name. Secrets are never passed to the logger: the auth token is compared but never logged,
 and request bodies are not echoed.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 
 _RESERVED = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__)
 
@@ -20,7 +20,9 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
-            "ts": datetime.fromtimestamp(record.created, timezone.utc)
+            # Local time with UTC offset; TZ selects the zone, UTC prints as Z.
+            "ts": datetime.fromtimestamp(record.created)
+            .astimezone()
             .isoformat(timespec="milliseconds")
             .replace("+00:00", "Z"),
             "level": record.levelname,

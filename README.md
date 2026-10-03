@@ -44,6 +44,37 @@ per-request overrides and pin the relay to its configured target.
 A `200` means the packet left the host. Wake-on-LAN is fire-and-forget: it is
 not a confirmation that the target actually woke up.
 
+## Parameters
+
+Parameters follow the [linuxserver.io](https://docs.linuxserver.io/) style.
+
+| Parameter                       | Function                                                          |
+| ------------------------------- | ----------------------------------------------------------------- |
+| `--network host`                | Required: the broadcast must reach the target's layer 2 segment    |
+| `-e PUID=1000`                  | User ID the relay runs as; never `0`                               |
+| `-e PGID=1000`                  | Group ID the relay runs as; never `0`                              |
+| `-e TZ=Etc/UTC`                 | Time zone, e.g. `Europe/Berlin`; log time stamps follow it         |
+| `-e WOL_AUTH_TOKEN=`            | Shared secret, required (see the table below)                      |
+| `--read-only`                   | Supported: the relay writes no files                               |
+| `--cap-drop ALL --cap-add SETUID --cap-add SETGID` | Supported: all the entrypoint needs to switch to `PUID:PGID` |
+
+```bash
+docker run -d --name wol-relay --restart unless-stopped \
+  --network host --read-only \
+  --cap-drop ALL --cap-add SETUID --cap-add SETGID \
+  --security-opt no-new-privileges:true \
+  -e PUID=1000 -e PGID=1000 -e TZ=Europe/Berlin \
+  -e WOL_AUTH_TOKEN=... -e WOL_TARGET_MAC=aa:bb:cc:dd:ee:ff \
+  ghcr.io/tom-joad/wol-relay-container:latest
+```
+
+The container starts as root only so the entrypoint can switch to `PUID:PGID`;
+the relay itself never runs as root, and `PUID`/`PGID` of `0` abort the start.
+Started with `--user`, the container runs as that user and ignores both. This
+image deliberately does not use the linuxserver.io base image (s6-overlay,
+docker mods): the relay is stateless, and the small Alpine image keeps
+`read_only` and a minimal set of capabilities.
+
 ## Environment variables
 
 | Variable                | Required | Default           | Description                                                        |
@@ -152,15 +183,20 @@ rest_command:
 Omit `payload` to fall back to `WOL_TARGET_MAC`. The command then becomes
 available as the `rest_command.wake_target` action in automations and scripts.
 
+## Unraid
+
+A template is in [unraid/](unraid/): see [README-UNRAID.md](unraid/README-UNRAID.md).
+
 ## Logging
 
 One JSON object per line on stdout, so `docker logs` stays greppable and
-machine-readable. The auth token is never logged — neither on success nor on
+machine-readable. Time stamps are local time with a UTC offset according to
+`TZ` (`Z` for UTC). The auth token is never logged — neither on success nor on
 rejection.
 
 ```json
-{"ts":"2026-01-01T12:00:00.000Z","level":"INFO","event":"packet_sent","mac":"aa:bb:cc:dd:ee:ff","broadcast":"255.255.255.255","port":9,"bytes":102,"source":"env"}
-{"ts":"2026-01-01T12:00:05.000Z","level":"WARNING","event":"auth_rejected","path":"/wol"}
+{"ts":"2026-01-01T13:00:00.000+01:00","level":"INFO","event":"packet_sent","mac":"aa:bb:cc:dd:ee:ff","broadcast":"255.255.255.255","port":9,"bytes":102,"source":"env"}
+{"ts":"2026-01-01T13:00:05.000+01:00","level":"WARNING","event":"auth_rejected","path":"/wol"}
 ```
 
 ## Security notes
@@ -185,6 +221,11 @@ Run it locally without Docker:
 ```bash
 WOL_AUTH_TOKEN=dev-token WOL_TARGET_MAC=aa:bb:cc:dd:ee:ff python app.py
 ```
+
+## Contributing and security
+
+Changes are listed in [CHANGELOG.md](CHANGELOG.md). Report vulnerabilities
+privately, see [SECURITY.md](SECURITY.md).
 
 ## License
 
