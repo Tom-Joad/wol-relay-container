@@ -3,6 +3,13 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Images are published only for releases (`v*` tags), no longer for every
+  push to `main`. `latest` now always points to the newest release; before,
+  a push to `main` could overwrite it.
+
 ## [1.0.3] - 2026-10-12
 
 ### Security

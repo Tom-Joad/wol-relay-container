@@ -122,9 +122,10 @@ the broadcast will not reach the target.
 docker pull ghcr.io/tom-joad/wol-relay-container:latest
 ```
 
-Every push to `main` builds and publishes `linux/amd64` and `linux/arm64`
-images to `ghcr.io/tom-joad/wol-relay-container`, tagged `latest` plus
-`sha-<commit>`; a `v*` tag additionally publishes the semver tags. Images carry
+Each release (a `v*` tag) builds and publishes `linux/amd64` and
+`linux/arm64` images to `ghcr.io/tom-joad/wol-relay-container`, tagged with
+the version (`1.0.3`), the minor version (`1.0`), `latest` and
+`sha-<commit>`. Pushes to `main` only run the tests. Images carry
 a build provenance attestation and an SBOM, and are signed keylessly with
 cosign:
 
