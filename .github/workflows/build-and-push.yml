@@ -71,7 +71,7 @@ jobs:
     # Nothing reaches the registry unless the tests, the dependency audit,
     # the smoke test and the secret scan all pass first.
     needs: test
-    if: github.event_name != 'pull_request'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
