@@ -3,6 +3,13 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+- pip is removed from the image after the requirements are installed. The
+  libraries it bundles (`urllib3`, `msgpack`) had known high-severity issues
+  in 1.0.2; the relay itself never used them.
+
 ## [1.0.2] - 2026-10-12
 
 ### Changed
