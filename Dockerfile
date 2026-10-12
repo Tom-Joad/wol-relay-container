@@ -24,8 +24,12 @@ RUN apk add --no-cache tzdata su-exec
 
 WORKDIR /app
 
+# pip is only needed to install the requirements. Removing it keeps the
+# libraries it bundles (urllib3, msgpack, ...) out of the image and out of
+# vulnerability scans.
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --requirement requirements.txt
+RUN pip install --no-cache-dir --requirement requirements.txt \
+ && pip uninstall --yes pip
 
 COPY app.py logging_setup.py wol.py ./
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
