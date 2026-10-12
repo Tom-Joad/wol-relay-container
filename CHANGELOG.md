@@ -3,7 +3,7 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.3] - 2026-10-12
 
 ### Security
 - pip is removed from the image after the requirements are installed. The
