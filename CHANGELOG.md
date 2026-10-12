@@ -3,6 +3,14 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [1.0.2] - 2026-10-12
+
+### Changed
+- The image is based on `python:3.14-alpine` (was `python:3.12-alpine`),
+  pinned by digest so Dependabot proposes updates.
+- CI builds the image on every push and pull request and runs a smoke test
+  against it, hardened as in `docker-compose.yml`.
+
 ## [1.0.1] - 2026-10-03
 
 ### Changed
