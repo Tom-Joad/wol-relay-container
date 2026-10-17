@@ -8,6 +8,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/Tom-Joad/wol-relay-container</Support>
   <Project>https://github.com/Tom-Joad/wol-relay-container</Project>
+  <Icon>https://raw.githubusercontent.com/Tom-Joad/unraid-templates/main/icons/wol-relay-container.png</Icon>
   <TemplateURL>https://raw.githubusercontent.com/Tom-Joad/wol-relay-container/main/unraid/wol-relay-container.xml</TemplateURL>
   <Overview>
     Small HTTP relay that sends a Wake-on-LAN magic packet when it receives an authenticated POST,
