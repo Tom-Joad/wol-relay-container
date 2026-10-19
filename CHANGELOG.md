@@ -3,12 +3,18 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.4] - 2026-10-19
 
 ### Changed
+- The `starting` log line names the version.
+- `docker-compose.yml` uses the published image.
 - Images are published only for releases (`v*` tags), no longer for every
   push to `main`. `latest` now always points to the newest release; before,
   a push to `main` could overwrite it.
+
+### Fixed
+- A token header with non-ASCII characters is answered with 401 instead of
+  an internal error (500).
 
 ## [1.0.3] - 2026-10-12
 

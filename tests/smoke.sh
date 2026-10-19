@@ -67,7 +67,7 @@ for _ in $(seq 1 60); do
     sleep 2
 done
 [[ $(docker inspect -f '{{.State.Health.Status}}' "$NAME") == healthy ]] || fail "not healthy"
-in_log '"event":"starting"' || fail "no starting line"
+in_log '"event":"starting","version":"[0-9]+\.[0-9]+\.[0-9]+"' || fail "no starting line with the version"
 
 USERS=$(docker exec "$NAME" ps -o user,args | awk '/app.py/ && !/awk/ {print $1}')
 [[ -n $USERS ]] || fail "relay not running"
