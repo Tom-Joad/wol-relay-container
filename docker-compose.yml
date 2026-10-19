@@ -1,8 +1,7 @@
 services:
   wol-relay:
-    build: .
-    # Published images can be used instead of a local build:
-    # image: ghcr.io/tom-joad/wol-relay-container:latest
+    image: ghcr.io/tom-joad/wol-relay-container:latest
+    # To build it yourself instead, replace the image line with "build: .".
     container_name: wol-relay
     restart: unless-stopped
 

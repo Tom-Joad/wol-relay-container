@@ -71,6 +71,11 @@ def test_wrong_token_is_rejected(client):
     assert response.status_code == 401
 
 
+def test_a_non_ascii_token_is_rejected_not_an_error(client):
+    response = client.post("/wol", headers={"X-Auth-Token": "t\u00f6ken"})
+    assert response.status_code == 401
+
+
 def test_default_target_is_used(client):
     response = client.post("/wol", headers={"X-Auth-Token": TOKEN})
     assert response.status_code == 200

@@ -18,6 +18,8 @@ from wol import normalize_mac, send_magic_packet
 
 LOG = logging.getLogger("wol-relay")
 
+VERSION = "1.0.4"
+
 AUTH_HEADER = "X-Auth-Token"
 
 
@@ -168,8 +170,11 @@ def create_app(config: Config | None = None) -> Flask:
 
 
 def _authorized(expected_token: str) -> bool:
+    # Compared as bytes: compare_digest refuses str with non-ASCII
+    # characters, and a header with an umlaut would end in a 500 instead
+    # of a 401.
     presented = request.headers.get(AUTH_HEADER, "")
-    return hmac.compare_digest(presented, expected_token)
+    return hmac.compare_digest(presented.encode("utf-8", "surrogateescape"), expected_token.encode("utf-8"))
 
 
 def main() -> None:
@@ -186,6 +191,7 @@ def main() -> None:
     LOG.info(
         "starting",
         extra={
+            "version": VERSION,
             "listen": f"{config.listen_host}:{config.listen_port}",
             "broadcast": config.broadcast_address,
             "wol_port": config.wol_port,
