@@ -53,6 +53,12 @@ wait_for_exit || fail "kept running without WOL_AUTH_TOKEN"
 in_log 'WOL_AUTH_TOKEN is required' || fail "no message about WOL_AUTH_TOKEN"
 docker rm -f "$NAME" >/dev/null
 
+echo "== a bad WOL_LOG_LEVEL stops the container with config_invalid"
+docker run -d --name "$NAME" "${HARDENING[@]}" -e WOL_AUTH_TOKEN=x -e WOL_LOG_LEVEL=LOUD "$IMAGE" >/dev/null
+wait_for_exit || fail "kept running with WOL_LOG_LEVEL=LOUD"
+in_log '"event":"config_invalid".*WOL_LOG_LEVEL' || fail "no config_invalid line about WOL_LOG_LEVEL"
+docker rm -f "$NAME" >/dev/null
+
 echo "== PUID 0 is refused"
 docker run -d --name "$NAME" "${HARDENING[@]}" -e PUID=0 -e WOL_AUTH_TOKEN=x "$IMAGE" >/dev/null
 wait_for_exit || fail "kept running with PUID=0"

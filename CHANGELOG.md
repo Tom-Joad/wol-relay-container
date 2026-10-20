@@ -3,6 +3,16 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [1.0.5] - 2026-10-20
+
+### Fixed
+- An unknown `WOL_LOG_LEVEL` stops the start with a `config_invalid` line
+  that names the setting, instead of a Python traceback.
+- `WOL_BROADCAST_ADDRESS` is checked at start: anything but an IPv4
+  address stops the container with `config_invalid`, instead of showing up
+  as a `502` on the first wake-up. The log level is no longer
+  case-sensitive.
+
 ## [1.0.4] - 2026-10-19
 
 ### Changed

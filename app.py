@@ -7,6 +7,7 @@ from environment variables at runtime. Nothing is hardcoded.
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import logging
 import os
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from wol import normalize_mac, send_magic_packet
 
 LOG = logging.getLogger("wol-relay")
 
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 AUTH_HEADER = "X-Auth-Token"
 
@@ -60,14 +61,25 @@ class Config:
                 "no target reachable: set WOL_TARGET_MAC or enable WOL_ALLOW_BODY_MAC"
             )
 
+        # Checked here: a typo would otherwise only show up as a 502 on the
+        # first wake-up, or end the start in a traceback.
+        broadcast = env.get("WOL_BROADCAST_ADDRESS", "").strip() or "255.255.255.255"
+        try:
+            ipaddress.IPv4Address(broadcast)
+        except ValueError as exc:
+            raise ConfigError(f"WOL_BROADCAST_ADDRESS must be an IPv4 address, got {broadcast!r}") from exc
+        log_level = env.get("WOL_LOG_LEVEL", "").strip().upper() or "INFO"
+        if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
+            raise ConfigError(f"WOL_LOG_LEVEL must be DEBUG, INFO, WARNING or ERROR, got {log_level!r}")
+
         return cls(
             auth_token=token,
             default_mac=default_mac,
-            broadcast_address=env.get("WOL_BROADCAST_ADDRESS", "255.255.255.255"),
+            broadcast_address=broadcast,
             wol_port=_int_env(env, "WOL_PORT", 9),
             listen_host=env.get("WOL_LISTEN_HOST", "0.0.0.0"),
             listen_port=_int_env(env, "WOL_LISTEN_PORT", 8099),
-            log_level=env.get("WOL_LOG_LEVEL", "INFO"),
+            log_level=log_level,
             allow_body_mac=allow_body_mac,
         )
 
