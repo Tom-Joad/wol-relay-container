@@ -130,3 +130,19 @@ def test_config_defaults():
     assert config.wol_port == 9
     assert config.listen_port == 8099
     assert config.allow_body_mac is True
+
+
+@pytest.mark.parametrize("name, value", [
+    ("WOL_LOG_LEVEL", "LOUD"),
+    ("WOL_BROADCAST_ADDRESS", "192.168.1"),
+    ("WOL_BROADCAST_ADDRESS", "broadcast.example"),
+])
+def test_config_rejects_a_bad_setting(name, value):
+    env = {"WOL_AUTH_TOKEN": "t", "WOL_TARGET_MAC": "aa:bb:cc:dd:ee:ff", name: value}
+    with pytest.raises(ConfigError, match=name):
+        Config.from_env(env)
+
+
+def test_log_level_is_case_insensitive():
+    env = {"WOL_AUTH_TOKEN": "t", "WOL_TARGET_MAC": "aa:bb:cc:dd:ee:ff", "WOL_LOG_LEVEL": "debug"}
+    assert Config.from_env(env).log_level == "DEBUG"
