@@ -19,7 +19,7 @@ from wol import normalize_mac, send_magic_packet
 
 LOG = logging.getLogger("wol-relay")
 
-VERSION = "1.0.5"
+VERSION = "1.0.6"
 
 AUTH_HEADER = "X-Auth-Token"
 

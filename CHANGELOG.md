@@ -3,7 +3,7 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.6] - 2026-10-22
 
 ### Changed
 - The build upgrades the Alpine packages before installing anything, so
@@ -11,6 +11,10 @@ All notable changes to this project are listed here. Versions follow
   image. Before, packages the base image ships (such as musl, brotli,
   c-ares and ca-certificates) stayed at its state until the next base
   image update.
+
+### Security
+- Security updates of the distribution packages, picked up by rebuilding the image:
+  - `musl` 1.2.6-r3 (CVE-2026-107891)
 
 ## [1.0.5] - 2026-10-20
 
