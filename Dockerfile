@@ -19,8 +19,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 # tzdata makes TZ work (log time stamps follow it); su-exec drops privileges
 # to PUID:PGID. Numeric IDs need no passwd entry, so the root filesystem can
-# stay read-only.
-RUN apk add --no-cache tzdata su-exec
+# stay read-only. The upgrade picks up Alpine fixes newer than the pinned
+# image.
+RUN apk upgrade --no-cache \
+ && apk add --no-cache tzdata su-exec
 
 WORKDIR /app
 
