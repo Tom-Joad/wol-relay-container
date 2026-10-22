@@ -3,6 +3,15 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- The build upgrades the Alpine packages before installing anything, so
+  every image has the current fixes, not only those of the pinned base
+  image. Before, packages the base image ships (such as musl, brotli,
+  c-ares and ca-certificates) stayed at its state until the next base
+  image update.
+
 ## [1.0.5] - 2026-10-20
 
 ### Fixed
