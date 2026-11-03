@@ -1,5 +1,5 @@
 # Pinned by digest (a multi-arch index); Dependabot proposes new digests.
-FROM python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+FROM python:3.14-alpine@sha256:eb2c62658b8d51bff0acc408504b76521d02030de56a8a3c1e830083e89b89d2
 
 # image.source is what makes the GHCR package inherit the repository's
 # visibility instead of staying private on its own.
