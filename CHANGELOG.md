@@ -3,6 +3,12 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [1.0.7] - 2026-11-03
+
+### Security
+- The base image moves to Python 3.14.10 (was 3.14.8), with the security
+  fixes of Python 3.14.9 and 3.14.10.
+
 ## [1.0.6] - 2026-10-22
 
 ### Changed
