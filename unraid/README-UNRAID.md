@@ -18,7 +18,6 @@ interface; everything it does shows up in the container log.
    | `WOL_TARGET_MAC` | MAC address of the machine to wake (optional if callers send one) |
    | `WOL_LISTEN_PORT` | `8099`; with host networking this port opens on the Unraid host |
    | `PUID`, `PGID` | `99`, `100` (nobody:users) |
-   | `TZ` | e.g. `Europe/Berlin` |
 
    The advanced view has the remaining settings. Don't add `--user` to
    *Extra Parameters*: the container sets the user from `PUID`/`PGID` itself.

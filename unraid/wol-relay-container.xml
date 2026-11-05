@@ -22,7 +22,6 @@
   <Config Name="WOL_LISTEN_PORT" Target="WOL_LISTEN_PORT" Default="8099" Mode="" Description="HTTP port. The container uses host networking: this port opens on the Unraid host." Type="Variable" Display="always" Required="true" Mask="false"/>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User the relay runs as (nobody)" Type="Variable" Display="always" Required="true" Mask="false"/>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group the relay runs as (users)" Type="Variable" Display="always" Required="true" Mask="false"/>
-  <Config Name="TZ" Target="TZ" Default="Etc/UTC" Mode="" Description="Time zone for log time stamps, e.g. Europe/Berlin" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="WOL_ALLOW_BODY_MAC" Target="WOL_ALLOW_BODY_MAC" Default="true" Mode="" Description="false: refuse a mac in the request body and wake only WOL_TARGET_MAC" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="WOL_BROADCAST_ADDRESS" Target="WOL_BROADCAST_ADDRESS" Default="255.255.255.255" Mode="" Description="Broadcast destination; a subnet broadcast such as 192.168.1.255 also works" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="WOL_PORT" Target="WOL_PORT" Default="9" Mode="" Description="UDP port of the magic packet (typically 9 or 7)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
