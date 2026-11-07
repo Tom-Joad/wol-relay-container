@@ -3,6 +3,12 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- The base image moves to the rebuilt `python:3.14-alpine` (digest `a18b20a`,
+  still Python 3.14.10): Alpine 3.24.4, `apk-tools` 3.0.9, `tzdata` 2026f.
+
 ## [1.0.7] - 2026-11-03
 
 ### Security
