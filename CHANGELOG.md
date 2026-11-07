@@ -3,7 +3,7 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.8] - 2026-11-07
 
 ### Changed
 - The base image moves to the rebuilt `python:3.14-alpine` (digest `a18b20a`,
@@ -98,6 +98,7 @@ a change that needs action when upgrading only comes with a new major version.
 - CI: actions updated to their Node 24 releases; the test job gets
   `pull-requests: read` so gitleaks works on pull requests.
 
+[1.0.8]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.4...v1.0.5
