@@ -5,6 +5,15 @@ All notable changes to this project are listed here. Versions follow
 
 ## [Unreleased]
 
+### Changed
+- CI: `docker/login-action` moves to v4.8.0, and the security watch follows
+  the current shared template: an unreachable package index counts as an
+  unreachable source instead of ending the run, the release tag is the
+  merged release commit, only a dated changelog heading counts as released,
+  Debian versions compare like dpkg, and merging the release pull request no
+  longer closes issues (the watch closes an "available" issue itself once the
+  published image is fixed). No change to the image.
+
 ### Security
 - A zero-padded `PUID` or `PGID` (`00`, `000`) is refused like `0`. Before,
   the entrypoint compared the text with `0`, and `su-exec` then ran the
