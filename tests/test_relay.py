@@ -1,8 +1,7 @@
 import dataclasses
 import logging
+import socket
 import threading
-import urllib.error
-import urllib.request
 
 import pytest
 
@@ -344,12 +343,15 @@ def test_waitress_refuses_a_large_unauthenticated_body_before_buffering_it(confi
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     try:
-        request = urllib.request.Request(
-            f"http://127.0.0.1:{port}/wol", data=b"x" * 600_000, method="POST"
-        )
-        with pytest.raises(urllib.error.HTTPError) as excinfo:
-            urllib.request.urlopen(request, timeout=5)
-        assert excinfo.value.code == 413
+        # Only the headers go out: the announced length is enough for the 413,
+        # and a client still writing the body when waitress closes the
+        # connection can see a reset instead of the answer.
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as conn:
+            conn.sendall(
+                b"POST /wol HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 600000\r\n\r\n"
+            )
+            status_line = conn.makefile("rb").readline()
+        assert status_line.split()[1] == b"413"
     finally:
         server.close()
         thread.join(timeout=5)
