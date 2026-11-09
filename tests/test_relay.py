@@ -1,15 +1,21 @@
 import dataclasses
 import logging
+import socket
 import threading
-import urllib.error
-import urllib.request
 
 import pytest
 
-from app import MAX_BODY_BYTES, Config, ConfigError, FailureThrottle, create_app
+from app import (
+    MAX_BODY_BYTES,
+    Config,
+    ConfigError,
+    FailureThrottle,
+    create_app,
+    health_url,
+)
 from wol import build_magic_packet, normalize_mac
 
-TOKEN = "test-token"
+TOKEN = "test-token-0123456789"
 MAC = "aa:bb:cc:dd:ee:ff"
 
 
@@ -142,14 +148,121 @@ def test_config_defaults():
     ("WOL_BROADCAST_ADDRESS", "broadcast.example"),
 ])
 def test_config_rejects_a_bad_setting(name, value):
-    env = {"WOL_AUTH_TOKEN": "t", "WOL_TARGET_MAC": "aa:bb:cc:dd:ee:ff", name: value}
+    env = {"WOL_AUTH_TOKEN": TOKEN, "WOL_TARGET_MAC": "aa:bb:cc:dd:ee:ff", name: value}
     with pytest.raises(ConfigError, match=name):
         Config.from_env(env)
 
 
 def test_log_level_is_case_insensitive():
-    env = {"WOL_AUTH_TOKEN": "t", "WOL_TARGET_MAC": "aa:bb:cc:dd:ee:ff", "WOL_LOG_LEVEL": "debug"}
+    env = {"WOL_AUTH_TOKEN": TOKEN, "WOL_TARGET_MAC": "aa:bb:cc:dd:ee:ff", "WOL_LOG_LEVEL": "debug"}
     assert Config.from_env(env).log_level == "DEBUG"
+
+
+def _env(**overrides):
+    return {"WOL_AUTH_TOKEN": TOKEN, "WOL_TARGET_MAC": MAC, **overrides}
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "abcdefghijklmnop ",  # trailing space
+        " abcdefghijklmnop",
+        "abcdefghijklmnop\r",  # .env saved with Windows line endings
+        "abcdefghijklmnop\n",
+        " " * 20,
+        "t\u00f6ken-0123456789abc",  # non-ASCII
+        "abcdefghijklmn\x00p",
+        "abcdefghijklmno",  # 15 characters
+        "x",
+    ],
+)
+def test_config_refuses_a_token_that_could_never_match_or_is_too_short(token):
+    with pytest.raises(ConfigError, match="WOL_AUTH_TOKEN"):
+        Config.from_env(_env(WOL_AUTH_TOKEN=token))
+
+
+def test_config_accepts_a_16_character_token_with_inner_spaces():
+    token = "abc def ghi jkl!"
+    assert Config.from_env(_env(WOL_AUTH_TOKEN=token)).auth_token == token
+
+
+def test_a_non_ascii_header_never_matches_and_a_latin1_header_is_no_error(client):
+    for value in ("t\u00f6ken-0123456789", "\u20ac" * 20):
+        response = client.post("/wol", headers={"X-Auth-Token": value})
+        assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        (None, "0.0.0.0"),
+        ("", "0.0.0.0"),
+        ("  ", "0.0.0.0"),
+        (" 192.168.1.20 ", "192.168.1.20"),
+        ("127.0.0.1", "127.0.0.1"),
+        ("localhost", "localhost"),
+        ("::1", "::1"),
+    ],
+)
+def test_listen_host_is_stripped_and_defaulted(raw, expected):
+    env = _env() if raw is None else _env(WOL_LISTEN_HOST=raw)
+    assert Config.from_env(env).listen_host == expected
+
+
+@pytest.mark.parametrize("raw", ["192.168.1.300", "relay.example", "0.0.0", "1.2.3.4:80"])
+def test_config_rejects_a_bad_listen_host_naming_the_setting(raw):
+    with pytest.raises(ConfigError, match="WOL_LISTEN_HOST"):
+        Config.from_env(_env(WOL_LISTEN_HOST=raw))
+
+
+def test_main_reports_a_bad_listen_host_as_config_invalid(monkeypatch, capsys):
+    import app as app_module
+
+    monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
+    monkeypatch.setenv("WOL_LISTEN_HOST", "192.168.1.300")
+    with pytest.raises(SystemExit):
+        app_module.main()
+    assert '"event":"config_invalid"' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "env, url",
+    [
+        ({}, "http://127.0.0.1:8099/health"),
+        ({"WOL_LISTEN_PORT": ""}, "http://127.0.0.1:8099/health"),
+        ({"WOL_LISTEN_PORT": "9100"}, "http://127.0.0.1:9100/health"),
+        ({"WOL_LISTEN_HOST": ""}, "http://127.0.0.1:8099/health"),
+        ({"WOL_LISTEN_HOST": "0.0.0.0"}, "http://127.0.0.1:8099/health"),
+        ({"WOL_LISTEN_HOST": "172.31.250.10"}, "http://172.31.250.10:8099/health"),
+        ({"WOL_LISTEN_HOST": "localhost"}, "http://localhost:8099/health"),
+        ({"WOL_LISTEN_HOST": "::"}, "http://[::1]:8099/health"),
+        ({"WOL_LISTEN_HOST": "fd00::5"}, "http://[fd00::5]:8099/health"),
+    ],
+)
+def test_health_url_follows_the_listen_settings(env, url):
+    assert health_url(Config.from_env(_env(**env))) == url
+
+
+def test_the_healthcheck_asks_the_address_the_relay_listens_on(monkeypatch):
+    """Real HTTP on loopback: healthcheck.py finds a relay bound to 127.0.0.2."""
+    from waitress.server import create_server
+
+    import healthcheck
+
+    config = Config.from_env(_env(WOL_LISTEN_HOST="127.0.0.2", WOL_LISTEN_PORT="1"))
+    server = create_server(create_app(config), host="127.0.0.2", port=0)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
+        monkeypatch.setenv("WOL_LISTEN_HOST", "127.0.0.2")
+        monkeypatch.setenv("WOL_LISTEN_PORT", str(server.effective_port))
+        assert healthcheck.main() == 0
+        monkeypatch.setenv("WOL_LISTEN_HOST", "127.0.0.1")  # nothing listens there
+        assert healthcheck.main() == 1
+    finally:
+        server.close()
+        thread.join(timeout=5)
 
 
 def _post(client, data, content_type="application/json"):
@@ -230,15 +343,25 @@ def test_waitress_refuses_a_large_unauthenticated_body_before_buffering_it(confi
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     try:
-        request = urllib.request.Request(
-            f"http://127.0.0.1:{port}/wol", data=b"x" * 600_000, method="POST"
-        )
-        with pytest.raises(urllib.error.HTTPError) as excinfo:
-            urllib.request.urlopen(request, timeout=5)
-        assert excinfo.value.code == 413
+        # Only the headers go out: the announced length is enough for the 413,
+        # and a client still writing the body when waitress closes the
+        # connection can see a reset instead of the answer.
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as conn:
+            conn.sendall(
+                b"POST /wol HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 600000\r\n\r\n"
+            )
+            status_line = conn.makefile("rb").readline()
+        assert status_line.split()[1] == b"413"
     finally:
         server.close()
         thread.join(timeout=5)
+
+
+def test_the_healthcheck_fails_on_invalid_settings(monkeypatch):
+    import healthcheck
+
+    monkeypatch.delenv("WOL_AUTH_TOKEN", raising=False)
+    assert healthcheck.main() == 1
 
 
 def test_main_passes_the_body_limit_to_waitress(monkeypatch):

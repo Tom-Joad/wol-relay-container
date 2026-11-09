@@ -81,19 +81,22 @@ docker mods): the relay is stateless, and the small Alpine image keeps
 
 | Variable                | Required | Default           | Description                                                        |
 | ----------------------- | -------- | ----------------- | ------------------------------------------------------------------ |
-| `WOL_AUTH_TOKEN`        | yes      | —                 | Shared secret expected in the `X-Auth-Token` header                 |
+| `WOL_AUTH_TOKEN`        | yes      | —                 | Shared secret expected in the `X-Auth-Token` header: 16 or more printable ASCII characters, no leading or trailing whitespace |
 | `WOL_TARGET_MAC`        | no\*     | —                 | Default target MAC address                                          |
 | `WOL_ALLOW_BODY_MAC`    | no       | `true`            | Allow `{"mac": "..."}` in the request body to override the target   |
 | `WOL_BROADCAST_ADDRESS` | no       | `255.255.255.255` | Broadcast destination; a subnet broadcast also works                |
 | `WOL_PORT`              | no       | `9`               | UDP port the magic packet is sent to (typically 9 or 7)             |
-| `WOL_LISTEN_HOST`       | no       | `0.0.0.0`         | HTTP bind address                                                   |
+| `WOL_LISTEN_HOST`       | no       | `0.0.0.0`         | HTTP bind address: an IP address or `localhost`; empty means the default |
 | `WOL_LISTEN_PORT`       | no       | `8099`            | HTTP bind port                                                      |
 | `WOL_LOG_LEVEL`         | no       | `INFO`            | `DEBUG`, `INFO`, `WARNING` or `ERROR`                               |
 
 \* Either `WOL_TARGET_MAC` must be set or `WOL_ALLOW_BODY_MAC` must stay
 enabled — otherwise the relay has no way to learn a target and refuses to
-start. An invalid value in any variable also aborts startup with a logged
-reason rather than failing on the first request.
+start. An invalid value in any variable (a token that is too short or has
+whitespace or non-ASCII characters around or in it, a `WOL_LISTEN_HOST` that
+isn't an IP address) also aborts startup with a logged reason rather than
+failing on the first request. The container's health check asks on the
+address and port the relay listens on.
 
 ## Deployment
 
@@ -108,11 +111,15 @@ token with:
 openssl rand -hex 32
 ```
 
-Then:
+Then start the prebuilt image (`ghcr.io/tom-joad/wol-relay-container:latest`,
+see [docker-compose.yml](docker-compose.yml)):
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
+
+To build the image yourself instead, replace the `image:` line in
+`docker-compose.yml` with `build: .` and run `docker compose up -d --build`.
 
 `network_mode: host` is a Linux-only Docker feature. On Docker Desktop for
 macOS or Windows the container does not share the host's layer 2 segment and
@@ -120,13 +127,15 @@ the broadcast will not reach the target.
 
 ### Prebuilt image
 
+`docker compose up -d` pulls it; to fetch it by hand:
+
 ```bash
 docker pull ghcr.io/tom-joad/wol-relay-container:latest
 ```
 
 Each release (a `v*` tag) builds and publishes `linux/amd64` and
 `linux/arm64` images to `ghcr.io/tom-joad/wol-relay-container`, tagged with
-the version (`1.0.3`), the minor version (`1.0`), `latest` and
+the version (e.g. `1.2.3`), the minor version (`1.2`), `latest` and
 `sha-<commit>`. Pushes to `main` only run the tests. Images carry
 a build provenance attestation and an SBOM, and are signed keylessly with
 cosign:

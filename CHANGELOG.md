@@ -3,9 +3,18 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.0.0] - Unreleased
 
 ### Changed
+- `WOL_AUTH_TOKEN` is checked at start: a token with leading or trailing
+  whitespace (for example the `\r` of a `.env` saved with Windows line
+  endings), with characters outside printable ASCII, or shorter than 16
+  characters stops the container with `config_invalid`. Before, such a token
+  started fine and then answered `401` to every request (or was easy to
+  guess). **Upgrade note:** a shorter token must be replaced
+  (`openssl rand -hex 32`) in the relay and in its callers.
+- The presented token is read as latin-1, the way WSGI hands headers over,
+  instead of UTF-8.
 - CI: `docker/login-action` moves to v4.8.0, and the security watch follows
   the current shared template: an unreachable package index counts as an
   unreachable source instead of ending the run, the release tag is the
@@ -28,6 +37,17 @@ All notable changes to this project are listed here. Versions follow
 - `auth_rejected` log lines name the client address.
 
 ### Fixed
+- The health check asks on the address and port the relay listens on. Before,
+  it always used `127.0.0.1` and the raw `WOL_LISTEN_PORT`, so a container
+  with `WOL_LISTEN_HOST` set to one address, or with an empty
+  `WOL_LISTEN_PORT`, stayed `unhealthy` while it served requests.
+- `WOL_LISTEN_HOST` is stripped, an empty value means `0.0.0.0`, and
+  anything that is not an IP address or `localhost` stops the start with
+  `config_invalid` naming the setting. Before, an empty or mistyped value
+  ended in a waitress traceback.
+- README: the deployment section starts the prebuilt image with
+  `docker compose up -d` and describes building it yourself as the
+  alternative.
 - A body that isn't valid JSON (truncated, not UTF-8, deeply nested), is not
   a JSON object, or comes without `Content-Type: application/json` gets
   `400`. Before, the relay treated it as "no body", answered `200` and woke
