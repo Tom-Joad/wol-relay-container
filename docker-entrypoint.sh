@@ -17,9 +17,16 @@ case "$PUID$PGID" in
         ;;
 esac
 
-if [ "$PUID" = "0" ] || [ "$PGID" = "0" ]; then
-    echo "refusing to run the relay as root: set PUID and PGID to a non-zero ID" >&2
-    exit 1
-fi
+# An ID of zeros only ("0", "00", "000") is root too, so a string comparison
+# with "0" isn't enough: su-exec reads 00 as uid 0.
+for id in "$PUID" "$PGID"; do
+    case "$id" in
+        *[!0]*) ;;
+        *)
+            echo "refusing to run the relay as root: set PUID and PGID to a non-zero ID" >&2
+            exit 1
+            ;;
+    esac
+done
 
 exec su-exec "$PUID:$PGID" "$@"

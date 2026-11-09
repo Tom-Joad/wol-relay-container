@@ -59,11 +59,14 @@ wait_for_exit || fail "kept running with WOL_LOG_LEVEL=LOUD"
 in_log '"event":"config_invalid".*WOL_LOG_LEVEL' || fail "no config_invalid line about WOL_LOG_LEVEL"
 docker rm -f "$NAME" >/dev/null
 
-echo "== PUID 0 is refused"
-docker run -d --name "$NAME" "${HARDENING[@]}" -e PUID=0 -e WOL_AUTH_TOKEN=x "$IMAGE" >/dev/null
-wait_for_exit || fail "kept running with PUID=0"
-in_log 'refusing to run the relay as root' || fail "no message about PUID=0"
-docker rm -f "$NAME" >/dev/null
+# 0, and the zero-padded spellings su-exec also reads as root.
+for ids in "PUID=0" "PUID=00" "PGID=000"; do
+    echo "== $ids is refused"
+    docker run -d --name "$NAME" "${HARDENING[@]}" -e "$ids" -e WOL_AUTH_TOKEN=x "$IMAGE" >/dev/null
+    wait_for_exit || fail "kept running with $ids"
+    in_log 'refusing to run the relay as root' || fail "no message about $ids"
+    docker rm -f "$NAME" >/dev/null
+done
 
 echo "== start"
 docker run -d --name "$NAME" "${HARDENING[@]}" -e PUID="$PUID" -e PGID="$PGID" \
@@ -87,6 +90,11 @@ echo "== endpoints"
 [[ $(request POST /wol "$TOKEN" '{"mac":"not-a-mac"}') == 400 ]] || fail "invalid MAC isn't 400"
 [[ $(request POST /wol "$TOKEN" '{"mac":"00:11:22:33:44:55"}') == 200 ]] || fail "valid request isn't 200"
 in_log '"event":"packet_sent"' || fail "no packet_sent in the log"
+[[ $(request POST /wol "$TOKEN" '{"mac":"11:22:33:44:55:66"') == 400 ]] || fail "truncated JSON isn't 400"
+BIG=$(head -c 100000 /dev/zero | tr '\0' x)
+[[ $(request POST /wol "" "$BIG") == 413 ]] || fail "a large body without token isn't 413"
+in_log '"level":"ERROR"' && fail "an ERROR line in the log"
+in_log '"event":"auth_rejected".*"client":' || fail "auth_rejected doesn't name the client"
 
 if in_log "$TOKEN"; then fail "the token is in the log"; fi
 
