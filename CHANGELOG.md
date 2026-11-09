@@ -14,6 +14,29 @@ All notable changes to this project are listed here. Versions follow
   longer closes issues (the watch closes an "available" issue itself once the
   published image is fixed). No change to the image.
 
+### Security
+- A zero-padded `PUID` or `PGID` (`00`, `000`) is refused like `0`. Before,
+  the entrypoint compared the text with `0`, and `su-exec` then ran the
+  relay as root.
+- Request bodies are limited to 4 KiB. Anything bigger gets `413` before it
+  is buffered; before, a large body without a token ended in an error log
+  line under `--read-only`, or wrote up to 1 GiB into the container's
+  writable layer.
+- Wrong tokens are counted per client address. After 20 in 15 minutes the
+  address gets `429` with `Retry-After` (also for a correct token) until the
+  window passes. The count lives in memory and a restart clears it.
+- `auth_rejected` log lines name the client address.
+
+### Fixed
+- A body that isn't valid JSON (truncated, not UTF-8, deeply nested), is not
+  a JSON object, or comes without `Content-Type: application/json` gets
+  `400`. Before, the relay treated it as "no body", answered `200` and woke
+  the default machine instead of the one the caller asked for. An empty body
+  still means the default target.
+- `{"mac": ""}` (or `0`, `false`, `null`) is an invalid MAC address. Before,
+  it was read as "no MAC supplied". The `source` log field now follows
+  whether a `mac` was sent.
+
 ## [1.0.8] - 2026-11-07
 
 ### Changed

@@ -21,8 +21,9 @@ so the following are of particular interest:
 - a way to send a packet without a valid `X-Auth-Token`
 - a way around `WOL_ALLOW_BODY_MAC=false`
 
-The relay speaks plain HTTP and has no rate limiting; see *Security notes* in
-the README. The container starts as root only to switch to `PUID:PGID` and
+The relay speaks plain HTTP. It counts wrong tokens per client address and
+answers `429` after 20 in 15 minutes, and it refuses request bodies over
+4 KiB; see *Security notes* in the README. The container starts as root only to switch to `PUID:PGID` and
 runs the relay as that unprivileged user, with all capabilities dropped but
 `SETUID` and `SETGID`.
 
