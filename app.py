@@ -229,9 +229,7 @@ def _authorized(expected_token: str) -> bool:
 
 def health_url(config: Config) -> str:
     """The URL the relay answers /health on, as reachable from inside the container."""
-    host = config.listen_host
-    if ipaddress.ip_address("127.0.0.1" if host == "localhost" else host).is_unspecified:
-        host = "127.0.0.1" if host == "0.0.0.0" else "::1"
+    host = {"0.0.0.0": "127.0.0.1", "::": "::1"}.get(config.listen_host, config.listen_host)
     if ":" in host:
         host = f"[{host}]"
     return f"http://{host}:{config.listen_port}/health"
