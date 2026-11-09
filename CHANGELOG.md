@@ -3,6 +3,32 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- `WOL_AUTH_TOKEN` is checked at start: a token with leading or trailing
+  whitespace (for example the `\r` of a `.env` saved with Windows line
+  endings), with characters outside printable ASCII, or shorter than 16
+  characters stops the container with `config_invalid`. Before, such a token
+  started fine and then answered `401` to every request (or was easy to
+  guess). **Upgrade note:** a shorter token must be replaced
+  (`openssl rand -hex 32`) in the relay and in its callers.
+- The presented token is read as latin-1, the way WSGI hands headers over,
+  instead of UTF-8.
+
+### Fixed
+- The health check asks on the address and port the relay listens on. Before,
+  it always used `127.0.0.1` and the raw `WOL_LISTEN_PORT`, so a container
+  with `WOL_LISTEN_HOST` set to one address, or with an empty
+  `WOL_LISTEN_PORT`, stayed `unhealthy` while it served requests.
+- `WOL_LISTEN_HOST` is stripped, an empty value means `0.0.0.0`, and
+  anything that is not an IP address or `localhost` stops the start with
+  `config_invalid` naming the setting. Before, an empty or mistyped value
+  ended in a waitress traceback.
+- README: the deployment section starts the prebuilt image with
+  `docker compose up -d` and describes building it yourself as the
+  alternative.
+
 ## [1.0.8] - 2026-11-07
 
 ### Changed

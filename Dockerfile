@@ -33,7 +33,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir --requirement requirements.txt \
  && pip uninstall --yes pip
 
-COPY app.py logging_setup.py wol.py ./
+COPY app.py healthcheck.py logging_setup.py wol.py ./
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # The container starts as root only so the entrypoint can switch to PUID:PGID
@@ -42,9 +42,10 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8099
 
+# Asks on the address and port the relay really listens on (WOL_LISTEN_HOST,
+# empty settings falling back to the defaults).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD python -c "import os,urllib.request,sys; \
-sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+os.environ['WOL_LISTEN_PORT']+'/health', timeout=3).status == 200 else 1)"
+    CMD ["python", "healthcheck.py"]
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["python", "app.py"]

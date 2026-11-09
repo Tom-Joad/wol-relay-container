@@ -30,6 +30,14 @@ wait_for_exit() {
     return 1
 }
 
+wait_healthy() {
+    for _ in $(seq 1 60); do
+        [[ $(docker inspect -f '{{.State.Health.Status}}' "$NAME") == healthy ]] && return 0
+        sleep 2
+    done
+    return 1
+}
+
 # An HTTP request from inside the container; prints the status code.
 request() { # method path [token] [json body]
     docker exec -i "$NAME" python - "$@" <<'PY'
@@ -54,13 +62,37 @@ in_log 'WOL_AUTH_TOKEN is required' || fail "no message about WOL_AUTH_TOKEN"
 docker rm -f "$NAME" >/dev/null
 
 echo "== a bad WOL_LOG_LEVEL stops the container with config_invalid"
-docker run -d --name "$NAME" "${HARDENING[@]}" -e WOL_AUTH_TOKEN=x -e WOL_LOG_LEVEL=LOUD "$IMAGE" >/dev/null
+docker run -d --name "$NAME" "${HARDENING[@]}" -e WOL_AUTH_TOKEN="$TOKEN" -e WOL_LOG_LEVEL=LOUD "$IMAGE" >/dev/null
 wait_for_exit || fail "kept running with WOL_LOG_LEVEL=LOUD"
 in_log '"event":"config_invalid".*WOL_LOG_LEVEL' || fail "no config_invalid line about WOL_LOG_LEVEL"
 docker rm -f "$NAME" >/dev/null
 
+echo "== a bad WOL_AUTH_TOKEN stops the container with config_invalid"
+for bad in "x" "$TOKEN " "töken-0123456789abc"; do
+    docker run -d --name "$NAME" "${HARDENING[@]}" -e WOL_AUTH_TOKEN="$bad" "$IMAGE" >/dev/null
+    wait_for_exit || fail "kept running with WOL_AUTH_TOKEN='$bad'"
+    in_log '"event":"config_invalid".*WOL_AUTH_TOKEN' || fail "no config_invalid line for WOL_AUTH_TOKEN='$bad'"
+    docker rm -f "$NAME" >/dev/null
+done
+
+echo "== a bad WOL_LISTEN_HOST stops the container with config_invalid"
+docker run -d --name "$NAME" "${HARDENING[@]}" -e WOL_AUTH_TOKEN="$TOKEN" -e WOL_LISTEN_HOST=192.168.1.300 "$IMAGE" >/dev/null
+wait_for_exit || fail "kept running with WOL_LISTEN_HOST=192.168.1.300"
+in_log '"event":"config_invalid".*WOL_LISTEN_HOST' || fail "no config_invalid line about WOL_LISTEN_HOST"
+if in_log Traceback; then fail "a traceback instead of config_invalid"; fi
+docker rm -f "$NAME" >/dev/null
+
+echo "== the health check follows WOL_LISTEN_HOST and survives empty settings"
+# 127.0.0.2: a specific address nothing answers on at 127.0.0.1. Empty values
+# fall back to the defaults, and the health check must do the same.
+for settings in "WOL_LISTEN_HOST=127.0.0.2" "WOL_LISTEN_HOST=" "WOL_LISTEN_PORT=" "WOL_LISTEN_PORT=8123"; do
+    docker run -d --name "$NAME" "${HARDENING[@]}" -e WOL_AUTH_TOKEN="$TOKEN" -e "$settings" "$IMAGE" >/dev/null
+    wait_healthy || fail "not healthy with $settings"
+    docker rm -f "$NAME" >/dev/null
+done
+
 echo "== PUID 0 is refused"
-docker run -d --name "$NAME" "${HARDENING[@]}" -e PUID=0 -e WOL_AUTH_TOKEN=x "$IMAGE" >/dev/null
+docker run -d --name "$NAME" "${HARDENING[@]}" -e PUID=0 -e WOL_AUTH_TOKEN="$TOKEN" "$IMAGE" >/dev/null
 wait_for_exit || fail "kept running with PUID=0"
 in_log 'refusing to run the relay as root' || fail "no message about PUID=0"
 docker rm -f "$NAME" >/dev/null
@@ -68,11 +100,7 @@ docker rm -f "$NAME" >/dev/null
 echo "== start"
 docker run -d --name "$NAME" "${HARDENING[@]}" -e PUID="$PUID" -e PGID="$PGID" \
     -e WOL_AUTH_TOKEN="$TOKEN" "$IMAGE" >/dev/null
-for _ in $(seq 1 60); do
-    [[ $(docker inspect -f '{{.State.Health.Status}}' "$NAME") == healthy ]] && break
-    sleep 2
-done
-[[ $(docker inspect -f '{{.State.Health.Status}}' "$NAME") == healthy ]] || fail "not healthy"
+wait_healthy || fail "not healthy"
 in_log '"event":"starting","version":"[0-9]+\.[0-9]+\.[0-9]+"' || fail "no starting line with the version"
 
 USERS=$(docker exec "$NAME" ps -o user,args | awk '/app.py/ && !/awk/ {print $1}')

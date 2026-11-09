@@ -23,6 +23,8 @@ VERSION = "1.0.8"
 
 AUTH_HEADER = "X-Auth-Token"
 
+MIN_TOKEN_LENGTH = 16
+
 
 class ConfigError(RuntimeError):
     """Raised when the environment is missing or malformed."""
@@ -43,9 +45,7 @@ class Config:
     def from_env(cls, env: "os._Environ[str] | dict[str, str] | None" = None) -> "Config":
         env = os.environ if env is None else env
 
-        token = env.get("WOL_AUTH_TOKEN", "")
-        if not token:
-            raise ConfigError("WOL_AUTH_TOKEN is required and must not be empty")
+        token = _token_env(env)
 
         raw_mac = env.get("WOL_TARGET_MAC", "").strip()
         default_mac: str | None = None
@@ -77,11 +77,47 @@ class Config:
             default_mac=default_mac,
             broadcast_address=broadcast,
             wol_port=_int_env(env, "WOL_PORT", 9),
-            listen_host=env.get("WOL_LISTEN_HOST", "0.0.0.0"),
+            listen_host=_host_env(env, "WOL_LISTEN_HOST", "0.0.0.0"),
             listen_port=_int_env(env, "WOL_LISTEN_PORT", 8099),
             log_level=log_level,
             allow_body_mac=allow_body_mac,
         )
+
+
+def _token_env(env) -> str:
+    """The shared secret, refused if it could never match or is too easy to guess.
+
+    HTTP parsers strip whitespace around a header value and WSGI hands it over
+    as latin-1 text, so a token with edge whitespace or other characters than
+    printable ASCII would start fine and then answer 401 to every request.
+    """
+    token = env.get("WOL_AUTH_TOKEN", "")
+    if not token:
+        raise ConfigError("WOL_AUTH_TOKEN is required and must not be empty")
+    if token != token.strip():
+        raise ConfigError(
+            "WOL_AUTH_TOKEN has leading or trailing whitespace (a .env file with "
+            "Windows line endings?)"
+        )
+    if not all(" " <= char <= "~" for char in token):
+        raise ConfigError("WOL_AUTH_TOKEN may only contain printable ASCII characters")
+    if len(token) < MIN_TOKEN_LENGTH:
+        raise ConfigError(
+            f"WOL_AUTH_TOKEN must be at least {MIN_TOKEN_LENGTH} characters (openssl rand -hex 32)"
+        )
+    return token
+
+
+def _host_env(env, name: str, default: str) -> str:
+    raw = env.get(name, "").strip()
+    if not raw:
+        return default
+    if raw.lower() == "localhost":
+        return "localhost"
+    try:
+        return str(ipaddress.ip_address(raw))
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be an IP address or localhost, got {raw!r}") from exc
 
 
 def _int_env(env, name: str, default: int) -> int:
@@ -184,9 +220,21 @@ def create_app(config: Config | None = None) -> Flask:
 def _authorized(expected_token: str) -> bool:
     # Compared as bytes: compare_digest refuses str with non-ASCII
     # characters, and a header with an umlaut would end in a 500 instead
-    # of a 401.
+    # of a 401. WSGI decodes header values as latin-1, so that is the way
+    # back to the bytes the client sent. The configured token is printable
+    # ASCII (checked at start), so a non-ASCII byte can never match.
     presented = request.headers.get(AUTH_HEADER, "")
-    return hmac.compare_digest(presented.encode("utf-8", "surrogateescape"), expected_token.encode("utf-8"))
+    return hmac.compare_digest(presented.encode("latin-1", "replace"), expected_token.encode("ascii"))
+
+
+def health_url(config: Config) -> str:
+    """The URL the relay answers /health on, as reachable from inside the container."""
+    host = config.listen_host
+    if ipaddress.ip_address("127.0.0.1" if host == "localhost" else host).is_unspecified:
+        host = "127.0.0.1" if host == "0.0.0.0" else "::1"
+    if ":" in host:
+        host = f"[{host}]"
+    return f"http://{host}:{config.listen_port}/health"
 
 
 def main() -> None:
