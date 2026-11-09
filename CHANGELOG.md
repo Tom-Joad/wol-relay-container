@@ -3,7 +3,7 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.0.0] - Unreleased
 
 ### Changed
 - `WOL_AUTH_TOKEN` is checked at start: a token with leading or trailing
@@ -15,6 +15,26 @@ All notable changes to this project are listed here. Versions follow
   (`openssl rand -hex 32`) in the relay and in its callers.
 - The presented token is read as latin-1, the way WSGI hands headers over,
   instead of UTF-8.
+- CI: `docker/login-action` moves to v4.8.0, and the security watch follows
+  the current shared template: an unreachable package index counts as an
+  unreachable source instead of ending the run, the release tag is the
+  merged release commit, only a dated changelog heading counts as released,
+  Debian versions compare like dpkg, and merging the release pull request no
+  longer closes issues (the watch closes an "available" issue itself once the
+  published image is fixed). No change to the image.
+
+### Security
+- A zero-padded `PUID` or `PGID` (`00`, `000`) is refused like `0`. Before,
+  the entrypoint compared the text with `0`, and `su-exec` then ran the
+  relay as root.
+- Request bodies are limited to 4 KiB. Anything bigger gets `413` before it
+  is buffered; before, a large body without a token ended in an error log
+  line under `--read-only`, or wrote up to 1 GiB into the container's
+  writable layer.
+- Wrong tokens are counted per client address. After 20 in 15 minutes the
+  address gets `429` with `Retry-After` (also for a correct token) until the
+  window passes. The count lives in memory and a restart clears it.
+- `auth_rejected` log lines name the client address.
 
 ### Fixed
 - The health check asks on the address and port the relay listens on. Before,
@@ -28,6 +48,14 @@ All notable changes to this project are listed here. Versions follow
 - README: the deployment section starts the prebuilt image with
   `docker compose up -d` and describes building it yourself as the
   alternative.
+- A body that isn't valid JSON (truncated, not UTF-8, deeply nested), is not
+  a JSON object, or comes without `Content-Type: application/json` gets
+  `400`. Before, the relay treated it as "no body", answered `200` and woke
+  the default machine instead of the one the caller asked for. An empty body
+  still means the default target.
+- `{"mac": ""}` (or `0`, `false`, `null`) is an invalid MAC address. Before,
+  it was read as "no MAC supplied". The `source` log field now follows
+  whether a `mac` was sent.
 
 ## [1.0.8] - 2026-11-07
 

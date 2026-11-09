@@ -37,8 +37,10 @@ per-request overrides and pin the relay to its configured target.
 | Status | Meaning                                                        |
 | ------ | -------------------------------------------------------------- |
 | `200`  | Packet sent — body echoes `mac`, `broadcast` and `port`         |
-| `400`  | Malformed body, invalid MAC, or no target configured/supplied   |
+| `400`  | Body that isn't a JSON object (or sent without `Content-Type: application/json`), invalid MAC, or no target configured/supplied |
 | `401`  | Missing or wrong `X-Auth-Token`                                 |
+| `413`  | Request body larger than 4 KiB                                  |
+| `429`  | Too many wrong tokens from this client address; see `Retry-After` |
 | `502`  | The datagram could not be sent (socket error)                   |
 
 A `200` means the packet left the host. Wake-on-LAN is fire-and-forget: it is
@@ -206,15 +208,23 @@ rejection.
 
 ```json
 {"ts":"2026-01-01T13:00:00.000+01:00","level":"INFO","event":"packet_sent","mac":"aa:bb:cc:dd:ee:ff","broadcast":"255.255.255.255","port":9,"bytes":102,"source":"env"}
-{"ts":"2026-01-01T13:00:05.000+01:00","level":"WARNING","event":"auth_rejected","path":"/wol"}
+{"ts":"2026-01-01T13:00:05.000+01:00","level":"WARNING","event":"auth_rejected","path":"/wol","client":"192.168.1.20"}
 ```
 
 ## Security notes
 
 - The relay speaks plain HTTP. Keep it on a trusted network segment, or put a
   TLS-terminating reverse proxy in front of it.
-- The token is compared in constant time, but there is no rate limiting — a
-  reachable relay with a short token is guessable. Use a long random secret.
+- The token is compared in constant time. Wrong tokens are counted per client
+  address: 20 in 15 minutes lock that address out with `429` (and a
+  `Retry-After` header, also for a correct token) until the oldest failure
+  leaves the window. The count is kept in memory, so a restart clears it.
+  Behind a reverse proxy every request comes from the proxy's address, so
+  the limit then applies to all callers together. The limit slows guessing
+  down but doesn't replace a long random secret.
+- A request body is limited to 4 KiB; anything bigger gets `413` before it is
+  read. The `auth_rejected` log line names the client address; the lock-out
+  is logged once per address and window (`auth_throttled`).
 - Anyone holding the token can wake any MAC address reachable from the host
   unless `WOL_ALLOW_BODY_MAC=false` pins the target.
 

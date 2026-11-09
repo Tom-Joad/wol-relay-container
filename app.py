@@ -8,8 +8,13 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import json
 import logging
+import math
 import os
+import threading
+import time
+from collections import deque
 from dataclasses import dataclass
 
 from flask import Flask, jsonify, request
@@ -24,6 +29,16 @@ VERSION = "1.0.8"
 AUTH_HEADER = "X-Auth-Token"
 
 MIN_TOKEN_LENGTH = 16
+
+# A valid request is a few dozen bytes. Waitress (before the app runs) and
+# Flask both refuse anything bigger with 413, so nothing large is buffered.
+MAX_BODY_BYTES = 4096
+
+# Wrong tokens per client address: this many in the window lock the address
+# out until the oldest failure leaves the window.
+THROTTLE_FAILURES = 20
+THROTTLE_WINDOW_SECONDS = 15 * 60
+THROTTLE_MAX_ADDRESSES = 4096
 
 
 class ConfigError(RuntimeError):
@@ -144,42 +159,128 @@ def _bool_env(env, name: str, default: bool) -> bool:
     raise ConfigError(f"{name} must be a boolean, got {raw!r}")
 
 
+class FailureThrottle:
+    """In-memory count of failed token checks per client address.
+
+    Held in memory only, so a restart clears it. The number of tracked
+    addresses is capped, so a scanner can't grow it without bound.
+    """
+
+    def __init__(
+        self,
+        limit: int = THROTTLE_FAILURES,
+        window: float = THROTTLE_WINDOW_SECONDS,
+        max_addresses: int = THROTTLE_MAX_ADDRESSES,
+        clock=time.monotonic,
+    ) -> None:
+        self._limit = limit
+        self._window = window
+        self._max_addresses = max_addresses
+        self._clock = clock
+        self._failures: dict[str, deque[float]] = {}
+        self._announced: set[str] = set()
+        self._lock = threading.Lock()
+
+    def attempt(self, address: str) -> tuple[int, bool]:
+        """Count an attempt before the token is checked.
+
+        Returns ``(retry_after, first)``: ``retry_after`` is 0 when the
+        attempt may go on, else the seconds until the address is free again;
+        ``first`` is True for the first refusal in a window, so the caller
+        logs the throttle once, not once per request.
+        """
+        now = self._clock()
+        with self._lock:
+            times = self._failures.get(address)
+            if times is None:
+                self._make_room(now)
+                times = self._failures[address] = deque()
+            while times and now - times[0] >= self._window:
+                times.popleft()
+            if not times:
+                self._announced.discard(address)
+            if len(times) >= self._limit:
+                first = address not in self._announced
+                self._announced.add(address)
+                return max(1, math.ceil(times[0] + self._window - now)), first
+            times.append(now)
+            return 0, False
+
+    def succeeded(self, address: str) -> None:
+        """Take back the attempt counted for a request whose token was right."""
+        with self._lock:
+            times = self._failures.get(address)
+            if times:
+                times.pop()
+            if not times:
+                self._failures.pop(address, None)
+                self._announced.discard(address)
+
+    def _make_room(self, now: float) -> None:
+        if len(self._failures) < self._max_addresses:
+            return
+        for address in [a for a, t in self._failures.items() if not t or now - t[-1] >= self._window]:
+            del self._failures[address]
+            self._announced.discard(address)
+        while len(self._failures) >= self._max_addresses:
+            oldest = next(iter(self._failures))
+            del self._failures[oldest]
+            self._announced.discard(oldest)
+
+
 def create_app(config: Config | None = None) -> Flask:
     config = Config.from_env() if config is None else config
 
     app = Flask(__name__)
     app.config["WOL_RELAY"] = config
+    app.config["MAX_CONTENT_LENGTH"] = MAX_BODY_BYTES
 
     @app.get("/health")
     def health():
         return jsonify(status="ok"), 200
 
+    throttle = FailureThrottle()
+
+    @app.errorhandler(413)
+    def too_large(_error):
+        return jsonify(error="request body too large"), 413
+
     @app.post("/wol")
     def wake():
+        client = request.remote_addr or "unknown"
+        retry_after, first = throttle.attempt(client)
+        if retry_after:
+            if first:
+                LOG.warning("auth_throttled", extra={"client": client, "retry_after": retry_after})
+            response = jsonify(error="too many failed attempts")
+            response.headers["Retry-After"] = str(retry_after)
+            return response, 429
         if not _authorized(config.auth_token):
-            LOG.warning("auth_rejected", extra={"path": "/wol"})
+            LOG.warning("auth_rejected", extra={"path": "/wol", "client": client})
             return jsonify(error="unauthorized"), 401
+        throttle.succeeded(client)
 
-        body = request.get_json(silent=True)
-        if body is None:
-            body = {}
-        if not isinstance(body, dict):
-            return jsonify(error="request body must be a JSON object"), 400
+        try:
+            body = _read_body()
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
 
-        requested_mac = body.get("mac")
-        if requested_mac is not None and not config.allow_body_mac:
+        supplied = "mac" in body
+        if supplied and not config.allow_body_mac:
             LOG.warning("body_mac_refused")
             return jsonify(error="per-request MAC override is disabled"), 400
 
-        raw_mac = requested_mac if requested_mac is not None else config.default_mac
-        if not raw_mac:
+        source = "body" if supplied else "env"
+        if supplied:
+            try:
+                mac = normalize_mac(body["mac"])
+            except ValueError:
+                LOG.warning("invalid_mac", extra={"source": source})
+                return jsonify(error="invalid MAC address"), 400
+        elif config.default_mac:
+            mac = config.default_mac  # normalized when the settings were read
+        else:
             return jsonify(error="no target MAC configured or supplied"), 400
-
-        try:
-            mac = normalize_mac(raw_mac)
-        except ValueError:
-            LOG.warning("invalid_mac", extra={"source": "body" if requested_mac else "env"})
-            return jsonify(error="invalid MAC address"), 400
 
         try:
             sent = send_magic_packet(mac, config.broadcast_address, config.wol_port)
@@ -201,7 +302,7 @@ def create_app(config: Config | None = None) -> Flask:
                 "broadcast": config.broadcast_address,
                 "port": config.wol_port,
                 "bytes": sent,
-                "source": "body" if requested_mac else "env",
+                "source": source,
             },
         )
         return (
@@ -215,6 +316,28 @@ def create_app(config: Config | None = None) -> Flask:
         )
 
     return app
+
+
+def _read_body() -> dict:
+    """The request body as a JSON object; an empty body is an empty object.
+
+    Raises ``ValueError`` (with the message for the caller) for a body that
+    isn't a JSON object. Not ``get_json(silent=True)``: that turns a broken
+    body into "no body", and the default machine wakes instead of the one
+    the caller asked for.
+    """
+    raw = request.get_data()
+    if not raw:
+        return {}
+    if not request.is_json:
+        raise ValueError("Content-Type must be application/json")
+    try:
+        body = json.loads(raw)
+    except (ValueError, RecursionError) as exc:  # includes UnicodeDecodeError
+        raise ValueError("request body is not valid JSON") from exc
+    if not isinstance(body, dict):
+        raise ValueError("request body must be a JSON object")
+    return body
 
 
 def _authorized(expected_token: str) -> bool:
@@ -262,6 +385,7 @@ def main() -> None:
         host=config.listen_host,
         port=config.listen_port,
         ident="wol-relay",
+        max_request_body_size=MAX_BODY_BYTES,
     )
 
 
