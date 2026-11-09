@@ -222,11 +222,9 @@ def test_waitress_refuses_a_large_unauthenticated_body_before_buffering_it(confi
     """Over real HTTP on loopback: waitress answers 413 before the app runs."""
     from waitress.server import create_server
 
-    from app import MAX_BODY_BYTES as limit
-
     monkeypatch.setattr("app.send_magic_packet", lambda *a: pytest.fail("sent a packet"))
     server = create_server(
-        create_app(config), host="127.0.0.1", port=0, max_request_body_size=limit
+        create_app(config), host="127.0.0.1", port=0, max_request_body_size=MAX_BODY_BYTES
     )
     port = server.effective_port
     thread = threading.Thread(target=server.run, daemon=True)
