@@ -3,7 +3,7 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-11-10
 
 ### Changed
 - `WOL_AUTH_TOKEN` is checked at start: a token with leading or trailing
@@ -152,6 +152,7 @@ a change that needs action when upgrading only comes with a new major version.
 - CI: actions updated to their Node 24 releases; the test job gets
   `pull-requests: read` so gitleaks works on pull requests.
 
+[2.0.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.8...v2.0.0
 [1.0.8]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.5...v1.0.6
