@@ -3,6 +3,21 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- `requirements.txt` pins the packages Flask pulls in as well (Werkzeug,
+  Jinja2, MarkupSafe, click, itsdangerous, blinker), so every build
+  installs the same versions. The versions are the ones the 2.0.0 image
+  already has.
+
+### Fixed
+- README: a section on upgrading from 1.x lists what 2.0.0 refuses (short
+  tokens, bodies without `Content-Type: application/json`, the lock-out
+  after 20 wrong tokens). The development example uses a token long enough
+  to start, and a leftover note about swapping `build:` for `image:` is
+  gone. The Unraid template names the 16-character minimum.
+
 ## [2.0.0] - 2026-11-10
 
 ### Changed

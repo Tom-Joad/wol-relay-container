@@ -17,7 +17,7 @@
   </Overview>
   <Category>Tools: HomeAutomation:</Category>
   <ExtraParams>--read-only --cap-drop ALL --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges</ExtraParams>
-  <Config Name="WOL_AUTH_TOKEN" Target="WOL_AUTH_TOKEN" Default="" Mode="" Description="Shared secret expected in the X-Auth-Token header. Generate one with: openssl rand -hex 32" Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="WOL_AUTH_TOKEN" Target="WOL_AUTH_TOKEN" Default="" Mode="" Description="Shared secret expected in the X-Auth-Token header: at least 16 printable ASCII characters, or the container stops. Generate one with: openssl rand -hex 32" Type="Variable" Display="always" Required="true" Mask="true"/>
   <Config Name="WOL_TARGET_MAC" Target="WOL_TARGET_MAC" Default="" Mode="" Description="Default target MAC address, e.g. aa:bb:cc:dd:ee:ff. Optional if callers send a mac in the request body." Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="WOL_LISTEN_PORT" Target="WOL_LISTEN_PORT" Default="8099" Mode="" Description="HTTP port. The container uses host networking: this port opens on the Unraid host." Type="Variable" Display="always" Required="true" Mask="false"/>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User the relay runs as (nobody)" Type="Variable" Display="always" Required="true" Mask="false"/>

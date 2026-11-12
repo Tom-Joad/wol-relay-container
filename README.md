@@ -146,9 +146,6 @@ cosign verify ghcr.io/tom-joad/wol-relay-container:latest \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-To deploy that image instead of building locally, swap `build: .` for the
-`image:` line in [docker-compose.yml](docker-compose.yml).
-
 The pipeline runs the test suite, a `pip-audit` dependency check and a gitleaks
 secret scan first — nothing reaches the registry unless all three pass. The
 built image is then scanned with Trivy, in report-only mode so a fresh
@@ -194,6 +191,26 @@ rest_command:
 
 Omit `payload` to fall back to `WOL_TARGET_MAC`. The command then becomes
 available as the `rest_command.wake_target` action in automations and scripts.
+
+## Upgrading from 1.x
+
+2.0.0 is stricter than 1.x. Check these before or right after the update:
+
+- `WOL_AUTH_TOKEN` must be 16 or more printable ASCII characters without
+  leading or trailing whitespace. Otherwise the container stops with
+  `config_invalid` in the log. Replace a short token
+  (`openssl rand -hex 32`) in the relay and in every caller.
+- A request with a body needs `Content-Type: application/json`, and the
+  body must be a JSON object; anything else gets `400` (1.x ignored such a
+  body and woke the default target). In Home Assistant, set the header as
+  in the example above, or `content_type: application/json`, whenever the
+  `rest_command` has a `payload`. A request without a body still wakes
+  `WOL_TARGET_MAC`.
+- 20 wrong tokens from one address within 15 minutes lock that address out
+  with `429` until the oldest failure is 15 minutes old. A caller with an
+  old token will hit this; fix its token and wait, or restart the relay.
+- `PUID` or `PGID` written with leading zeros only (`00`) is refused like
+  `0`.
 
 ## Unraid
 
@@ -247,7 +264,7 @@ tests/smoke.sh wol-relay:dev
 Run it locally without Docker:
 
 ```bash
-WOL_AUTH_TOKEN=dev-token WOL_TARGET_MAC=aa:bb:cc:dd:ee:ff python app.py
+WOL_AUTH_TOKEN=$(openssl rand -hex 32) WOL_TARGET_MAC=aa:bb:cc:dd:ee:ff python app.py
 ```
 
 ## Contributing and security

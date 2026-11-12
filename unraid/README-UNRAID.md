@@ -14,7 +14,7 @@ interface; everything it does shows up in the container log.
 
    | Setting | Value |
    |---|---|
-   | `WOL_AUTH_TOKEN` | a long random secret, e.g. from `openssl rand -hex 32` |
+   | `WOL_AUTH_TOKEN` | a long random secret, e.g. from `openssl rand -hex 32`; at least 16 characters, or the container stops |
    | `WOL_TARGET_MAC` | MAC address of the machine to wake (optional if callers send one) |
    | `WOL_LISTEN_PORT` | `8099`; with host networking this port opens on the Unraid host |
    | `PUID`, `PGID` | `99`, `100` (nobody:users) |
