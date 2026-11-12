@@ -91,13 +91,25 @@ for settings in "WOL_LISTEN_HOST=127.0.0.2" "WOL_LISTEN_HOST=" "WOL_LISTEN_PORT=
     docker rm -f "$NAME" >/dev/null
 done
 
-# 0, and the zero-padded spellings su-exec also reads as root.
-for ids in "PUID=0" "PUID=00" "PGID=000"; do
+# The entrypoint checks, as root and with the image's own sh and su-exec
+# (the pytest versions of these need root, so CI runs them here): 0 and the
+# zero-padded spellings, IDs su-exec would cut to 32 bits (4294967296 is
+# root), (uid_t)-1, and non-numeric values.
+for ids in "PUID=0" "PUID=00" "PGID=000" "PUID=4294967296" "PGID=4294967296" \
+           "PUID=4294967295" "PUID=99999999999999999999" "PUID=abc" "PGID=1 0"; do
     echo "== $ids is refused"
-    docker run -d --name "$NAME" "${HARDENING[@]}" -e "$ids" -e WOL_AUTH_TOKEN="$TOKEN" "$IMAGE" >/dev/null
-    wait_for_exit || fail "kept running with $ids"
-    in_log 'refusing to run the relay as root' || fail "no message about $ids"
-    docker rm -f "$NAME" >/dev/null
+    if out=$(docker run --rm "${HARDENING[@]}" -e "$ids" "$IMAGE" id -u 2>&1); then
+        fail "started with $ids: $out"
+    fi
+    grep -qE 'refusing to run the relay as root|must be numeric' <<<"$out" || fail "no message about $ids: $out"
+done
+
+echo "== the entrypoint drops to PUID:PGID, leading zeros and the largest ID included"
+for ids in "4242 4343 4242:4343" "004242 0004343 4242:4343" "4294967294 4294967294 4294967294:4294967294"; do
+    read -r uid gid want <<<"$ids"
+    got=$(docker run --rm "${HARDENING[@]}" -e PUID="$uid" -e PGID="$gid" "$IMAGE" \
+        sh -c 'echo "$(id -u):$(id -g)"')
+    [[ $got == "$want" ]] || fail "PUID=$uid PGID=$gid ran as $got, not $want"
 done
 
 echo "== start"
@@ -123,6 +135,20 @@ BIG=$(head -c 100000 /dev/zero | tr '\0' x)
 [[ $(request POST /wol "" "$BIG") == 413 ]] || fail "a large body without token isn't 413"
 in_log '"level":"ERROR"' && fail "an ERROR line in the log"
 in_log '"event":"auth_rejected".*"client":' || fail "auth_rejected doesn't name the client"
+
+echo "== idle connections are closed and can't shut callers out"
+# Waitress takes 100 connections; 100 idle ones without a token used to block
+# every caller for two minutes. The relay closes them after 10 s.
+docker exec -i "$NAME" python - <<'PY' || fail "/health blocked by idle connections"
+import os, socket, sys, time, urllib.request
+port = int(os.environ["WOL_LISTEN_PORT"])
+idle = [socket.create_connection(("127.0.0.1", port)) for _ in range(100)]
+for sock in idle:
+    sock.sendall(b"POST /wol HTTP/1.1\r\nHost: relay\r\n")
+time.sleep(18)
+status = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5).status
+sys.exit(0 if status == 200 else 1)
+PY
 
 if in_log "$TOKEN"; then fail "the token is in the log"; fi
 

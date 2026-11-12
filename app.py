@@ -30,6 +30,10 @@ AUTH_HEADER = "X-Auth-Token"
 
 MIN_TOKEN_LENGTH = 16
 
+# Placeholders the repository has shipped in .env.example. They are public,
+# so a relay that still has one would accept anyone who read the repository.
+PUBLISHED_PLACEHOLDER_TOKENS = frozenset({"replace-with-a-long-random-secret"})
+
 # A valid request is a few dozen bytes. Waitress (before the app runs) and
 # Flask both refuse anything bigger with 413, so nothing large is buffered.
 MAX_BODY_BYTES = 4096
@@ -39,6 +43,13 @@ MAX_BODY_BYTES = 4096
 THROTTLE_FAILURES = 20
 THROTTLE_WINDOW_SECONDS = 15 * 60
 THROTTLE_MAX_ADDRESSES = 4096
+
+# Waitress keeps an idle connection for 120 s and takes 100 at most, so 100
+# idle connections (no token needed) shut out every caller, the health check
+# included, for minutes. A request is a few dozen bytes: a connection quiet
+# for 10 s is closed, checked every 5 s.
+CHANNEL_TIMEOUT_SECONDS = 10
+CLEANUP_INTERVAL_SECONDS = 5
 
 
 class ConfigError(RuntimeError):
@@ -116,6 +127,10 @@ def _token_env(env) -> str:
         )
     if not all(" " <= char <= "~" for char in token):
         raise ConfigError("WOL_AUTH_TOKEN may only contain printable ASCII characters")
+    if token in PUBLISHED_PLACEHOLDER_TOKENS:
+        raise ConfigError(
+            "WOL_AUTH_TOKEN is the placeholder from .env.example; set your own (openssl rand -hex 32)"
+        )
     if len(token) < MIN_TOKEN_LENGTH:
         raise ConfigError(
             f"WOL_AUTH_TOKEN must be at least {MIN_TOKEN_LENGTH} characters (openssl rand -hex 32)"
@@ -386,6 +401,8 @@ def main() -> None:
         port=config.listen_port,
         ident="wol-relay",
         max_request_body_size=MAX_BODY_BYTES,
+        channel_timeout=CHANNEL_TIMEOUT_SECONDS,
+        cleanup_interval=CLEANUP_INTERVAL_SECONDS,
     )
 
 

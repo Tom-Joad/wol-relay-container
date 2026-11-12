@@ -2,6 +2,7 @@ import dataclasses
 import logging
 import socket
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -179,6 +180,17 @@ def _env(**overrides):
 def test_config_refuses_a_token_that_could_never_match_or_is_too_short(token):
     with pytest.raises(ConfigError, match="WOL_AUTH_TOKEN"):
         Config.from_env(_env(WOL_AUTH_TOKEN=token))
+
+
+def test_config_refuses_the_published_placeholder_token():
+    with pytest.raises(ConfigError, match="placeholder"):
+        Config.from_env(_env(WOL_AUTH_TOKEN="replace-with-a-long-random-secret"))
+
+
+def test_env_example_ships_no_token():
+    """A copied .env.example must not start a relay with a public token."""
+    lines = (Path(__file__).resolve().parent.parent / ".env.example").read_text().splitlines()
+    assert "WOL_AUTH_TOKEN=" in lines
 
 
 def test_config_accepts_a_16_character_token_with_inner_spaces():
@@ -364,7 +376,7 @@ def test_the_healthcheck_fails_on_invalid_settings(monkeypatch):
     assert healthcheck.main() == 1
 
 
-def test_main_passes_the_body_limit_to_waitress(monkeypatch):
+def test_main_passes_the_limits_to_waitress(monkeypatch):
     import app as app_module
 
     captured = {}
@@ -372,6 +384,9 @@ def test_main_passes_the_body_limit_to_waitress(monkeypatch):
     monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
     app_module.main()
     assert captured["max_request_body_size"] == MAX_BODY_BYTES
+    # Idle connections are closed after 10 s instead of 120 s.
+    assert captured["channel_timeout"] == 10
+    assert captured["cleanup_interval"] <= 5
 
 
 def _fail(client, count, address="10.0.0.1"):
