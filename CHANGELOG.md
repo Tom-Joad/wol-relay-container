@@ -12,11 +12,9 @@ All notable changes to this project are listed here. Versions follow
   already has.
 
 ### Fixed
-- README: a section on upgrading from 1.x lists what 2.0.0 refuses (short
-  tokens, bodies without `Content-Type: application/json`, the lock-out
-  after 20 wrong tokens). The development example uses a token long enough
-  to start, and a leftover note about swapping `build:` for `image:` is
-  gone. The Unraid template names the 16-character minimum.
+- README: a new "Upgrading from 1.x" section, a development example whose
+  token is long enough to start, and no stale note about swapping `build:`
+  for `image:`. The Unraid template names the 16-character token minimum.
 
 ## [2.0.0] - 2026-11-10
 
