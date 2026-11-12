@@ -17,6 +17,10 @@ All notable changes to this project are listed here. Versions follow
   might read differently.
 - Every answer is JSON, `404` and `405` included, and carries
   `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
+- `requirements.txt` pins the packages Flask pulls in as well (Werkzeug,
+  Jinja2, MarkupSafe, click, itsdangerous, blinker), so every build
+  installs the same versions. The versions are the ones the 2.0.0 image
+  already has.
 
 ### Fixed
 - The health check ignores `http_proxy`. Before, a proxy set in the
@@ -24,6 +28,9 @@ All notable changes to this project are listed here. Versions follow
   `unhealthy` while the relay worked.
 - The `starting` line is logged with every `WOL_LOG_LEVEL`. Before,
   `WARNING` or `ERROR` dropped it.
+- README: a new "Upgrading from 1.x" section, a development example whose
+  token is long enough to start, and no stale note about swapping `build:`
+  for `image:`. The Unraid template names the 16-character token minimum.
 
 ### Security
 - `PUID` or `PGID` of 4294967296 or more is refused. Before, `su-exec` kept

@@ -150,9 +150,6 @@ cosign verify ghcr.io/tom-joad/wol-relay-container:latest \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-To deploy that image instead of building locally, swap `build: .` for the
-`image:` line in [docker-compose.yml](docker-compose.yml).
-
 The pipeline runs the test suite, a `pip-audit` dependency check and a gitleaks
 secret scan first — nothing reaches the registry unless all three pass. The
 built image is then scanned with Trivy, in report-only mode so a fresh
@@ -198,6 +195,24 @@ rest_command:
 
 Omit `payload` to fall back to `WOL_TARGET_MAC`. The command then becomes
 available as the `rest_command.wake_target` action in automations and scripts.
+
+## Upgrading from 1.x
+
+2.0.0 is stricter than 1.x. Check these before or right after the update:
+
+- A token shorter than 16 characters, or one with whitespace around it,
+  stops the container with `config_invalid` (rules under
+  [Environment variables](#environment-variables)). Replace it
+  (`openssl rand -hex 32`) in the relay and in every caller.
+- A request with a body needs `Content-Type: application/json`; 1.x ignored
+  a body without it and woke the default target, 2.0.0 answers `400`. In
+  Home Assistant, give every `rest_command` with a `payload` that header,
+  as in the example above. A request without a body still wakes
+  `WOL_TARGET_MAC`.
+- A caller with an old token is locked out with `429` after 20 tries (see
+  [Security notes](#security-notes)): fix its token, then wait up to 15
+  minutes or restart the relay.
+- `PUID` or `PGID` written with zeros only (`00`) is refused like `0`.
 
 ## Unraid
 
@@ -251,7 +266,7 @@ tests/smoke.sh wol-relay:dev
 Run it locally without Docker:
 
 ```bash
-WOL_AUTH_TOKEN=dev-token WOL_TARGET_MAC=aa:bb:cc:dd:ee:ff python app.py
+WOL_AUTH_TOKEN=$(openssl rand -hex 32) WOL_TARGET_MAC=aa:bb:cc:dd:ee:ff python app.py
 ```
 
 ## Contributing and security
