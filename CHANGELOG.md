@@ -3,7 +3,7 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [3.0.0] - Unreleased
+## [3.0.0] - 2026-11-12
 
 ### Changed
 - A MAC address (`mac` in the body, `WOL_TARGET_MAC`) is accepted only in
@@ -198,6 +198,7 @@ a change that needs action when upgrading only comes with a new major version.
 - CI: actions updated to their Node 24 releases; the test job gets
   `pull-requests: read` so gitleaks works on pull requests.
 
+[3.0.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.8...v2.0.0
 [1.0.8]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.6...v1.0.7
