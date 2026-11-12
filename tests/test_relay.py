@@ -261,7 +261,8 @@ def test_health_url_follows_the_listen_settings(env, url):
 
 
 def test_the_healthcheck_asks_the_address_the_relay_listens_on(monkeypatch):
-    """Real HTTP on loopback: healthcheck.py finds a relay bound to 127.0.0.2."""
+    """Real HTTP on loopback: healthcheck.py finds a relay bound to 127.0.0.2,
+    also with a proxy in the environment that would take the request away."""
     from waitress.server import create_server
 
     import healthcheck
@@ -274,6 +275,12 @@ def test_the_healthcheck_asks_the_address_the_relay_listens_on(monkeypatch):
         monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
         monkeypatch.setenv("WOL_LISTEN_HOST", "127.0.0.2")
         monkeypatch.setenv("WOL_LISTEN_PORT", str(server.effective_port))
+        for name in ("http_proxy", "HTTP_PROXY"):
+            monkeypatch.setenv(name, "http://127.0.0.1:9")  # nothing listens there
+        for name in ("no_proxy", "NO_PROXY"):
+            monkeypatch.delenv(name, raising=False)
+        # urlopen caches its opener, with the proxies of its first call.
+        monkeypatch.setattr("urllib.request._opener", None)
         assert healthcheck.main() == 0
         monkeypatch.setenv("WOL_LISTEN_HOST", "127.0.0.1")  # nothing listens there
         assert healthcheck.main() == 1
@@ -392,32 +399,6 @@ def test_waitress_refuses_a_large_unauthenticated_body_before_buffering_it(confi
             )
             status_line = conn.makefile("rb").readline()
         assert status_line.split()[1] == b"413"
-    finally:
-        server.close()
-        thread.join(timeout=5)
-
-
-def test_the_healthcheck_ignores_a_proxy(monkeypatch):
-    """http_proxy in the environment must not send the check elsewhere."""
-    from waitress.server import create_server
-
-    import healthcheck
-
-    config = Config.from_env(_env(WOL_LISTEN_HOST="127.0.0.1"))
-    server = create_server(create_app(config), host="127.0.0.1", port=0)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    try:
-        monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
-        monkeypatch.setenv("WOL_LISTEN_HOST", "127.0.0.1")
-        monkeypatch.setenv("WOL_LISTEN_PORT", str(server.effective_port))
-        for name in ("http_proxy", "HTTP_PROXY"):
-            monkeypatch.setenv(name, "http://127.0.0.1:9")  # nothing listens there
-        monkeypatch.delenv("no_proxy", raising=False)
-        monkeypatch.delenv("NO_PROXY", raising=False)
-        # urlopen caches its opener, with the proxies of its first call.
-        monkeypatch.setattr("urllib.request._opener", None)
-        assert healthcheck.main() == 0
     finally:
         server.close()
         thread.join(timeout=5)

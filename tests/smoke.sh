@@ -87,9 +87,11 @@ echo "== the health check follows WOL_LISTEN_HOST and survives empty settings an
 # fall back to the defaults, and the health check must do the same.
 # A proxy in the environment must not take the check away from the relay,
 # and "starting" comes first whatever the log level.
-for settings in "WOL_LISTEN_HOST=127.0.0.2" "WOL_LISTEN_HOST=" "WOL_LISTEN_PORT=" "WOL_LISTEN_PORT=8123" \
-                "http_proxy=http://127.0.0.1:9" "WOL_LOG_LEVEL=WARNING"; do
-    docker run -d --name "$NAME" "${HARDENING[@]}" -e WOL_AUTH_TOKEN="$TOKEN" -e "$settings" "$IMAGE" >/dev/null
+for settings in "WOL_LISTEN_HOST=127.0.0.2" "WOL_LISTEN_HOST=" "WOL_LISTEN_PORT=" \
+                "WOL_LISTEN_PORT=8123 http_proxy=http://127.0.0.1:9 WOL_LOG_LEVEL=WARNING"; do
+    read -ra vars <<<"$settings"
+    docker run -d --name "$NAME" "${HARDENING[@]}" -e WOL_AUTH_TOKEN="$TOKEN" \
+        "${vars[@]/#/--env=}" "$IMAGE" >/dev/null
     wait_healthy || fail "not healthy with $settings"
     in_log '"event":"starting"' || fail "no starting line with $settings"
     docker rm -f "$NAME" >/dev/null

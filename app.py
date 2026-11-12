@@ -42,9 +42,6 @@ THROTTLE_WINDOW_SECONDS = 15 * 60
 THROTTLE_MAX_ADDRESSES = 4096
 
 
-ERROR_TEXT = {413: "request body too large"}
-
-
 class ConfigError(RuntimeError):
     """Raised when the environment is missing or malformed."""
 
@@ -250,7 +247,8 @@ def create_app(config: Config | None = None) -> Flask:
         # JSON like every other answer (404, 405, 413), keeping headers
         # such as Allow.
         response = error.get_response()
-        response.data = json.dumps({"error": ERROR_TEXT.get(error.code, error.name.lower())})
+        text = "request body too large" if error.code == 413 else error.name.lower()
+        response.data = json.dumps({"error": text})
         response.content_type = "application/json"
         return response
 
@@ -348,17 +346,11 @@ def _read_body() -> dict:
         raise ValueError("Content-Type must be application/json")
     try:
         body = json.loads(raw, object_pairs_hook=_unique_keys)
-    except DuplicateKeyError:
-        raise
-    except (ValueError, RecursionError) as exc:  # includes UnicodeDecodeError
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         raise ValueError("request body is not valid JSON") from exc
     if not isinstance(body, dict):
         raise ValueError("request body must be a JSON object")
     return body
-
-
-class DuplicateKeyError(ValueError):
-    pass
 
 
 def _unique_keys(pairs: list[tuple[str, object]]) -> dict:
@@ -366,7 +358,7 @@ def _unique_keys(pairs: list[tuple[str, object]]) -> dict:
     so {"mac": A, "mac": B} could wake another machine than a proxy saw."""
     body = dict(pairs)
     if len(body) != len(pairs):
-        raise DuplicateKeyError("request body has a duplicate key")
+        raise ValueError("request body has a duplicate key")
     return body
 
 
@@ -412,7 +404,7 @@ def main() -> None:
             "body_mac_override": config.allow_body_mac,
         },
     )
-    logging.getLogger().setLevel(config.log_level)
+    logging_setup.configure(config.log_level)
     serve(
         create_app(config),
         host=config.listen_host,

@@ -30,10 +30,11 @@ def normalize_mac(value: str) -> str:
     if not isinstance(value, str):
         raise ValueError("MAC address must be a string")
 
-    if not _MAC_FORMATS.match(value.strip()):
+    value = value.strip()
+    if not _MAC_FORMATS.match(value):
         raise ValueError(f"invalid MAC address: {value!r}")
 
-    digits = re.sub(r"[:.-]", "", value.strip()).lower()
+    digits = re.sub(r"[:.-]", "", value).lower()
     return ":".join(digits[i : i + 2] for i in range(0, 12, 2))
 
 
