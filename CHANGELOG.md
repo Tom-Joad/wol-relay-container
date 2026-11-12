@@ -25,6 +25,23 @@ All notable changes to this project are listed here. Versions follow
 - The `starting` line is logged with every `WOL_LOG_LEVEL`. Before,
   `WARNING` or `ERROR` dropped it.
 
+### Security
+- `PUID` or `PGID` of 4294967296 or more is refused. Before, `su-exec` kept
+  only the low 32 bits of the ID, so `PUID=4294967296` ran the relay as
+  root. IDs from 1 to 4294967294 are accepted, leading zeros are ignored.
+- `.env.example` no longer carries a placeholder token, and the placeholder
+  it used to carry (`replace-with-a-long-random-secret`) stops the container
+  with `config_invalid`. Before, `cp .env.example .env` without editing the
+  token started a relay that accepted a token anyone could read in the
+  repository. **Upgrade note:** if your relay stops with this message, set
+  your own token (`openssl rand -hex 32`) in the relay and in its callers.
+- Idle connections are closed after 10 seconds instead of 120. Before, 100
+  idle connections, no token needed, shut out every caller and the health
+  check for two minutes at a time. Someone who keeps reopening them can
+  still crowd the relay out; keep it on a trusted network, as before.
+- The relay itself refuses to start as root (`config_invalid`), whatever
+  way the entrypoint's check was passed.
+
 ## [2.0.0] - 2026-11-10
 
 ### Changed
