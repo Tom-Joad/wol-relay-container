@@ -18,6 +18,7 @@ from collections import deque
 from dataclasses import dataclass
 
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 import logging_setup
 from wol import normalize_mac, send_magic_packet
@@ -39,6 +40,9 @@ MAX_BODY_BYTES = 4096
 THROTTLE_FAILURES = 20
 THROTTLE_WINDOW_SECONDS = 15 * 60
 THROTTLE_MAX_ADDRESSES = 4096
+
+
+ERROR_TEXT = {413: "request body too large"}
 
 
 class ConfigError(RuntimeError):
@@ -241,9 +245,20 @@ def create_app(config: Config | None = None) -> Flask:
 
     throttle = FailureThrottle()
 
-    @app.errorhandler(413)
-    def too_large(_error):
-        return jsonify(error="request body too large"), 413
+    @app.errorhandler(HTTPException)
+    def http_error(error: HTTPException):
+        # JSON like every other answer (404, 405, 413), keeping headers
+        # such as Allow.
+        response = error.get_response()
+        response.data = json.dumps({"error": ERROR_TEXT.get(error.code, error.name.lower())})
+        response.content_type = "application/json"
+        return response
+
+    @app.after_request
+    def no_caching(response):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
 
     @app.post("/wol")
     def wake():
@@ -332,11 +347,26 @@ def _read_body() -> dict:
     if not request.is_json:
         raise ValueError("Content-Type must be application/json")
     try:
-        body = json.loads(raw)
+        body = json.loads(raw, object_pairs_hook=_unique_keys)
+    except DuplicateKeyError:
+        raise
     except (ValueError, RecursionError) as exc:  # includes UnicodeDecodeError
         raise ValueError("request body is not valid JSON") from exc
     if not isinstance(body, dict):
         raise ValueError("request body must be a JSON object")
+    return body
+
+
+class DuplicateKeyError(ValueError):
+    pass
+
+
+def _unique_keys(pairs: list[tuple[str, object]]) -> dict:
+    """Refuse a key that appears twice: parsers disagree on which one counts,
+    so {"mac": A, "mac": B} could wake another machine than a proxy saw."""
+    body = dict(pairs)
+    if len(body) != len(pairs):
+        raise DuplicateKeyError("request body has a duplicate key")
     return body
 
 
@@ -368,7 +398,9 @@ def main() -> None:
         LOG.error("config_invalid", extra={"reason": str(exc)})
         raise SystemExit(1) from exc
 
-    logging_setup.configure(config.log_level)
+    # "starting" is always the first line, also with WOL_LOG_LEVEL=WARNING:
+    # the level applies from the next line on.
+    logging_setup.configure("INFO")
     LOG.info(
         "starting",
         extra={
@@ -380,6 +412,7 @@ def main() -> None:
             "body_mac_override": config.allow_body_mac,
         },
     )
+    logging.getLogger().setLevel(config.log_level)
     serve(
         create_app(config),
         host=config.listen_host,

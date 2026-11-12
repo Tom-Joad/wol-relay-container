@@ -82,12 +82,16 @@ in_log '"event":"config_invalid".*WOL_LISTEN_HOST' || fail "no config_invalid li
 if in_log Traceback; then fail "a traceback instead of config_invalid"; fi
 docker rm -f "$NAME" >/dev/null
 
-echo "== the health check follows WOL_LISTEN_HOST and survives empty settings"
+echo "== the health check follows WOL_LISTEN_HOST and survives empty settings and a proxy"
 # 127.0.0.2: a specific address nothing answers on at 127.0.0.1. Empty values
 # fall back to the defaults, and the health check must do the same.
-for settings in "WOL_LISTEN_HOST=127.0.0.2" "WOL_LISTEN_HOST=" "WOL_LISTEN_PORT=" "WOL_LISTEN_PORT=8123"; do
+# A proxy in the environment must not take the check away from the relay,
+# and "starting" comes first whatever the log level.
+for settings in "WOL_LISTEN_HOST=127.0.0.2" "WOL_LISTEN_HOST=" "WOL_LISTEN_PORT=" "WOL_LISTEN_PORT=8123" \
+                "http_proxy=http://127.0.0.1:9" "WOL_LOG_LEVEL=WARNING"; do
     docker run -d --name "$NAME" "${HARDENING[@]}" -e WOL_AUTH_TOKEN="$TOKEN" -e "$settings" "$IMAGE" >/dev/null
     wait_healthy || fail "not healthy with $settings"
+    in_log '"event":"starting"' || fail "no starting line with $settings"
     docker rm -f "$NAME" >/dev/null
 done
 

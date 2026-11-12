@@ -16,7 +16,10 @@ from app import Config, ConfigError, health_url
 def main() -> int:
     try:
         url = health_url(Config.from_env())
-        with urllib.request.urlopen(url, timeout=3) as response:
+        # No proxy: http_proxy in the container's environment would send the
+        # check to the proxy, which can't reach the relay's loopback address.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(url, timeout=3) as response:
             return 0 if response.status == 200 else 1
     except (ConfigError, OSError):
         return 1

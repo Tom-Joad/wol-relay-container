@@ -51,9 +51,26 @@ def client(config, monkeypatch):
 )
 def test_normalize_mac_accepts_common_spellings(raw):
     assert normalize_mac(raw) == MAC
+    assert normalize_mac(f" {raw}\n") == MAC
 
 
-@pytest.mark.parametrize("raw", ["", "aa:bb:cc:dd:ee", "zz:bb:cc:dd:ee:ff", "aabbccddeeff11"])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "",
+        "aa:bb:cc:dd:ee",
+        "zz:bb:cc:dd:ee:ff",
+        "aabbccddeeff11",
+        # Only the documented spellings, not anything that is 12 digits once
+        # every separator is gone.
+        "a:abbccddeeff",
+        "aa bb cc dd ee ff",
+        "aa:bb-cc:dd:ee:ff",
+        "aabbcc:ddeeff",
+        "a.a.b.b.c.c.d.d.e.e.f.f",
+        "aa:bb:cc:dd:ee:ff:",
+    ],
+)
 def test_normalize_mac_rejects_garbage(raw):
     with pytest.raises(ValueError):
         normalize_mac(raw)
@@ -295,12 +312,35 @@ def test_a_body_that_is_not_a_json_object_is_a_400_and_wakes_nothing(client, dat
 
 
 def test_a_body_that_exhausts_the_json_parser_is_a_400(client, monkeypatch):
-    def too_deep(_raw):
+    def too_deep(_raw, **_kwargs):
         raise RecursionError
 
     monkeypatch.setattr("app.json.loads", too_deep)
     assert _post(client, b"[[[").status_code == 400
     _assert_nothing_sent(client)
+
+
+def test_a_duplicate_key_is_a_400(client):
+    response = _post(client, b'{"mac": "11:22:33:44:55:66", "mac": "aa:bb:cc:dd:ee:ff"}')
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "request body has a duplicate key"}
+    _assert_nothing_sent(client)
+
+
+@pytest.mark.parametrize(
+    "method, path, status",
+    [("get", "/health", 200), ("post", "/wol", 401), ("get", "/nowhere", 404), ("get", "/wol", 405)],
+)
+def test_every_answer_is_json_and_not_cached(client, method, path, status):
+    response = getattr(client, method)(path)
+    assert response.status_code == status
+    assert response.is_json
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_a_405_keeps_its_allow_header(client):
+    assert "POST" in client.get("/wol").headers["Allow"]
 
 
 def test_an_empty_body_uses_the_default_target(client):
@@ -355,6 +395,43 @@ def test_waitress_refuses_a_large_unauthenticated_body_before_buffering_it(confi
     finally:
         server.close()
         thread.join(timeout=5)
+
+
+def test_the_healthcheck_ignores_a_proxy(monkeypatch):
+    """http_proxy in the environment must not send the check elsewhere."""
+    from waitress.server import create_server
+
+    import healthcheck
+
+    config = Config.from_env(_env(WOL_LISTEN_HOST="127.0.0.1"))
+    server = create_server(create_app(config), host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
+        monkeypatch.setenv("WOL_LISTEN_HOST", "127.0.0.1")
+        monkeypatch.setenv("WOL_LISTEN_PORT", str(server.effective_port))
+        for name in ("http_proxy", "HTTP_PROXY"):
+            monkeypatch.setenv(name, "http://127.0.0.1:9")  # nothing listens there
+        monkeypatch.delenv("no_proxy", raising=False)
+        monkeypatch.delenv("NO_PROXY", raising=False)
+        # urlopen caches its opener, with the proxies of its first call.
+        monkeypatch.setattr("urllib.request._opener", None)
+        assert healthcheck.main() == 0
+    finally:
+        server.close()
+        thread.join(timeout=5)
+
+
+def test_main_logs_starting_first_at_any_level(monkeypatch, capsys):
+    import app as app_module
+
+    monkeypatch.setattr("waitress.serve", lambda wsgi, **kwargs: None)
+    monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
+    monkeypatch.setenv("WOL_LOG_LEVEL", "WARNING")
+    app_module.main()
+    assert '"event":"starting"' in capsys.readouterr().out.splitlines()[0]
+    assert not logging.getLogger("wol-relay").isEnabledFor(logging.INFO)
 
 
 def test_the_healthcheck_fails_on_invalid_settings(monkeypatch):

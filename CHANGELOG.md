@@ -3,6 +3,28 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- A MAC address (`mac` in the body, `WOL_TARGET_MAC`) is accepted only in
+  the documented spellings: `aa:bb:cc:dd:ee:ff`, `aa-bb-cc-dd-ee-ff`,
+  `aabb.ccdd.eeff` or `aabbccddeeff`, in either case. Before, any mix of
+  separators was taken as long as twelve hex digits were left, for example
+  `aabbcc:ddeeff`. **Upgrade note:** a `WOL_TARGET_MAC` in another spelling
+  now stops the container with `config_invalid`; write it as above.
+- A JSON body with the same key twice (`{"mac": …, "mac": …}`) gets `400`.
+  Before, the last one counted, which another parser in front of the relay
+  might read differently.
+- Every answer is JSON, `404` and `405` included, and carries
+  `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
+
+### Fixed
+- The health check ignores `http_proxy`. Before, a proxy set in the
+  container's environment received the check, and the container stayed
+  `unhealthy` while the relay worked.
+- The `starting` line is logged with every `WOL_LOG_LEVEL`. Before,
+  `WARNING` or `ERROR` dropped it.
+
 ## [2.0.0] - 2026-11-10
 
 ### Changed
