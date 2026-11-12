@@ -3,7 +3,7 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.0.0] - Unreleased
 
 ### Changed
 - A MAC address (`mac` in the body, `WOL_TARGET_MAC`) is accepted only in
