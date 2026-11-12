@@ -28,8 +28,9 @@ to `WOL_TARGET_MAC`:
 { "mac": "aa:bb:cc:dd:ee:ff" }
 ```
 
-The `mac` field accepts `aa:bb:cc:dd:ee:ff`, `AA-BB-CC-DD-EE-FF`,
-`aabb.ccdd.eeff` and `aabbccddeeff`. Set `WOL_ALLOW_BODY_MAC=false` to refuse
+The `mac` field (and `WOL_TARGET_MAC`) accepts `aa:bb:cc:dd:ee:ff`,
+`AA-BB-CC-DD-EE-FF`, `aabb.ccdd.eeff` and `aabbccddeeff`, in upper or lower
+case, and nothing else. Set `WOL_ALLOW_BODY_MAC=false` to refuse
 per-request overrides and pin the relay to its configured target.
 
 ### Responses
@@ -37,11 +38,14 @@ per-request overrides and pin the relay to its configured target.
 | Status | Meaning                                                        |
 | ------ | -------------------------------------------------------------- |
 | `200`  | Packet sent — body echoes `mac`, `broadcast` and `port`         |
-| `400`  | Body that isn't a JSON object (or sent without `Content-Type: application/json`), invalid MAC, or no target configured/supplied |
+| `400`  | Body that isn't a JSON object (or sent without `Content-Type: application/json`), a key given twice, invalid MAC, or no target configured/supplied |
 | `401`  | Missing or wrong `X-Auth-Token`                                 |
 | `413`  | Request body larger than 4 KiB                                  |
 | `429`  | Too many wrong tokens from this client address; see `Retry-After` |
 | `502`  | The datagram could not be sent (socket error)                   |
+
+Every answer is JSON (errors as `{"error": "..."}`, also `404` and `405`)
+and carries `Cache-Control: no-store`.
 
 A `200` means the packet left the host. Wake-on-LAN is fire-and-forget: it is
 not a confirmation that the target actually woke up.

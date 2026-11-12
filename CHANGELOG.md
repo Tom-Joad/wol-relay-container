@@ -6,15 +6,48 @@ All notable changes to this project are listed here. Versions follow
 ## [Unreleased]
 
 ### Changed
+- A MAC address (`mac` in the body, `WOL_TARGET_MAC`) is accepted only in
+  the documented spellings: `aa:bb:cc:dd:ee:ff`, `aa-bb-cc-dd-ee-ff`,
+  `aabb.ccdd.eeff` or `aabbccddeeff`, in either case. Before, any mix of
+  separators was taken as long as twelve hex digits were left, for example
+  `aabbcc:ddeeff`. **Upgrade note:** a `WOL_TARGET_MAC` in another spelling
+  now stops the container with `config_invalid`; write it as above.
+- A JSON body with the same key twice (`{"mac": …, "mac": …}`) gets `400`.
+  Before, the last one counted, which another parser in front of the relay
+  might read differently.
+- Every answer is JSON, `404` and `405` included, and carries
+  `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
 - `requirements.txt` pins the packages Flask pulls in as well (Werkzeug,
   Jinja2, MarkupSafe, click, itsdangerous, blinker), so every build
   installs the same versions. The versions are the ones the 2.0.0 image
   already has.
 
 ### Fixed
+- The health check ignores `http_proxy`. Before, a proxy set in the
+  container's environment received the check, and the container stayed
+  `unhealthy` while the relay worked.
+- The `starting` line is logged with every `WOL_LOG_LEVEL`. Before,
+  `WARNING` or `ERROR` dropped it.
 - README: a new "Upgrading from 1.x" section, a development example whose
   token is long enough to start, and no stale note about swapping `build:`
   for `image:`. The Unraid template names the 16-character token minimum.
+
+### Security
+- `PUID` or `PGID` of 4294967296 or more is refused. Before, `su-exec` kept
+  only the low 32 bits of the ID, so `PUID=4294967296` ran the relay as
+  root. IDs from 1 to 4294967294 are accepted, leading zeros are ignored.
+- `.env.example` no longer carries a placeholder token, and the placeholder
+  it used to carry (`replace-with-a-long-random-secret`) stops the container
+  with `config_invalid`. Before, `cp .env.example .env` without editing the
+  token started a relay that accepted a token anyone could read in the
+  repository. **Upgrade note:** if your relay stops with this message, set
+  your own token (`openssl rand -hex 32`) in the relay and in its callers.
+- Idle connections are closed after 10 seconds instead of 120. Before, 100
+  idle connections, no token needed, shut out every caller and the health
+  check for two minutes at a time. Someone who keeps reopening them can
+  still crowd the relay out; keep it on a trusted network, as before.
+- The relay itself refuses to start as root (`config_invalid`), whatever
+  way the entrypoint's check was passed.
 
 ## [2.0.0] - 2026-11-10
 

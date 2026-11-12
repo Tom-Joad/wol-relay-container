@@ -9,8 +9,14 @@ from __future__ import annotations
 import re
 import socket
 
-_MAC_SEPARATORS = re.compile(r"[:\-.\s]")
-_HEX_12 = re.compile(r"\A[0-9a-f]{12}\Z")
+# The documented spellings only: six pairs joined by ":" or "-" (one kind
+# throughout), three groups of four joined by ".", or twelve digits.
+_MAC_FORMATS = re.compile(
+    r"\A(?:[0-9a-f]{2}([:-])(?:[0-9a-f]{2}\1){4}[0-9a-f]{2}"
+    r"|[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}"
+    r"|[0-9a-f]{12})\Z",
+    re.IGNORECASE,
+)
 
 MAGIC_PACKET_LENGTH = 102
 
@@ -24,11 +30,12 @@ def normalize_mac(value: str) -> str:
     if not isinstance(value, str):
         raise ValueError("MAC address must be a string")
 
-    stripped = _MAC_SEPARATORS.sub("", value).lower()
-    if not _HEX_12.match(stripped):
+    value = value.strip()
+    if not _MAC_FORMATS.match(value):
         raise ValueError(f"invalid MAC address: {value!r}")
 
-    return ":".join(stripped[i : i + 2] for i in range(0, 12, 2))
+    digits = re.sub(r"[:.-]", "", value).lower()
+    return ":".join(digits[i : i + 2] for i in range(0, 12, 2))
 
 
 def build_magic_packet(mac: str) -> bytes:

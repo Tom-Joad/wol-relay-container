@@ -18,6 +18,7 @@ from collections import deque
 from dataclasses import dataclass
 
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 import logging_setup
 from wol import normalize_mac, send_magic_packet
@@ -30,6 +31,10 @@ AUTH_HEADER = "X-Auth-Token"
 
 MIN_TOKEN_LENGTH = 16
 
+# Placeholders the repository has shipped in .env.example. They are public,
+# so a relay that still has one would accept anyone who read the repository.
+PUBLISHED_PLACEHOLDER_TOKENS = frozenset({"replace-with-a-long-random-secret"})
+
 # A valid request is a few dozen bytes. Waitress (before the app runs) and
 # Flask both refuse anything bigger with 413, so nothing large is buffered.
 MAX_BODY_BYTES = 4096
@@ -39,6 +44,13 @@ MAX_BODY_BYTES = 4096
 THROTTLE_FAILURES = 20
 THROTTLE_WINDOW_SECONDS = 15 * 60
 THROTTLE_MAX_ADDRESSES = 4096
+
+# Waitress keeps an idle connection for 120 s and takes 100 at most, so 100
+# idle connections (no token needed) shut out every caller, the health check
+# included, for minutes. A request is a few dozen bytes: a connection quiet
+# for 10 s is closed, checked every 5 s.
+CHANNEL_TIMEOUT_SECONDS = 10
+CLEANUP_INTERVAL_SECONDS = 5
 
 
 class ConfigError(RuntimeError):
@@ -116,6 +128,10 @@ def _token_env(env) -> str:
         )
     if not all(" " <= char <= "~" for char in token):
         raise ConfigError("WOL_AUTH_TOKEN may only contain printable ASCII characters")
+    if token in PUBLISHED_PLACEHOLDER_TOKENS:
+        raise ConfigError(
+            "WOL_AUTH_TOKEN is the placeholder from .env.example; set your own (openssl rand -hex 32)"
+        )
     if len(token) < MIN_TOKEN_LENGTH:
         raise ConfigError(
             f"WOL_AUTH_TOKEN must be at least {MIN_TOKEN_LENGTH} characters (openssl rand -hex 32)"
@@ -241,9 +257,21 @@ def create_app(config: Config | None = None) -> Flask:
 
     throttle = FailureThrottle()
 
-    @app.errorhandler(413)
-    def too_large(_error):
-        return jsonify(error="request body too large"), 413
+    @app.errorhandler(HTTPException)
+    def http_error(error: HTTPException):
+        # JSON like every other answer (404, 405, 413), keeping headers
+        # such as Allow.
+        response = error.get_response()
+        text = "request body too large" if error.code == 413 else error.name.lower()
+        response.data = json.dumps({"error": text})
+        response.content_type = "application/json"
+        return response
+
+    @app.after_request
+    def no_caching(response):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
 
     @app.post("/wol")
     def wake():
@@ -332,11 +360,20 @@ def _read_body() -> dict:
     if not request.is_json:
         raise ValueError("Content-Type must be application/json")
     try:
-        body = json.loads(raw)
-    except (ValueError, RecursionError) as exc:  # includes UnicodeDecodeError
+        body = json.loads(raw, object_pairs_hook=_unique_keys)
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         raise ValueError("request body is not valid JSON") from exc
     if not isinstance(body, dict):
         raise ValueError("request body must be a JSON object")
+    return body
+
+
+def _unique_keys(pairs: list[tuple[str, object]]) -> dict:
+    """Refuse a key that appears twice: parsers disagree on which one counts,
+    so {"mac": A, "mac": B} could wake another machine than a proxy saw."""
+    body = dict(pairs)
+    if len(body) != len(pairs):
+        raise ValueError("request body has a duplicate key")
     return body
 
 
@@ -362,13 +399,19 @@ def main() -> None:
     from waitress import serve
 
     try:
+        # The entrypoint refuses IDs that would be root; this checks the
+        # outcome, so a way past that check still can't run the relay as root.
+        if os.geteuid() == 0 or os.getegid() == 0:
+            raise ConfigError("refusing to run the relay as root: set PUID and PGID to a non-zero ID")
         config = Config.from_env()
     except ConfigError as exc:
         logging_setup.configure("INFO")
         LOG.error("config_invalid", extra={"reason": str(exc)})
         raise SystemExit(1) from exc
 
-    logging_setup.configure(config.log_level)
+    # "starting" is always the first line, also with WOL_LOG_LEVEL=WARNING:
+    # the level applies from the next line on.
+    logging_setup.configure("INFO")
     LOG.info(
         "starting",
         extra={
@@ -380,12 +423,15 @@ def main() -> None:
             "body_mac_override": config.allow_body_mac,
         },
     )
+    logging_setup.configure(config.log_level)
     serve(
         create_app(config),
         host=config.listen_host,
         port=config.listen_port,
         ident="wol-relay",
         max_request_body_size=MAX_BODY_BYTES,
+        channel_timeout=CHANNEL_TIMEOUT_SECONDS,
+        cleanup_interval=CLEANUP_INTERVAL_SECONDS,
     )
 
 

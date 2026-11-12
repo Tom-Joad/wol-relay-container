@@ -2,11 +2,15 @@ import dataclasses
 import logging
 import socket
 import threading
+from pathlib import Path
 
 import pytest
 
 from app import (
+    CHANNEL_TIMEOUT_SECONDS,
+    CLEANUP_INTERVAL_SECONDS,
     MAX_BODY_BYTES,
+    PUBLISHED_PLACEHOLDER_TOKENS,
     Config,
     ConfigError,
     FailureThrottle,
@@ -51,9 +55,26 @@ def client(config, monkeypatch):
 )
 def test_normalize_mac_accepts_common_spellings(raw):
     assert normalize_mac(raw) == MAC
+    assert normalize_mac(f" {raw}\n") == MAC
 
 
-@pytest.mark.parametrize("raw", ["", "aa:bb:cc:dd:ee", "zz:bb:cc:dd:ee:ff", "aabbccddeeff11"])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "",
+        "aa:bb:cc:dd:ee",
+        "zz:bb:cc:dd:ee:ff",
+        "aabbccddeeff11",
+        # Only the documented spellings, not anything that is 12 digits once
+        # every separator is gone.
+        "a:abbccddeeff",
+        "aa bb cc dd ee ff",
+        "aa:bb-cc:dd:ee:ff",
+        "aabbcc:ddeeff",
+        "a.a.b.b.c.c.d.d.e.e.f.f",
+        "aa:bb:cc:dd:ee:ff:",
+    ],
+)
 def test_normalize_mac_rejects_garbage(raw):
     with pytest.raises(ValueError):
         normalize_mac(raw)
@@ -181,6 +202,18 @@ def test_config_refuses_a_token_that_could_never_match_or_is_too_short(token):
         Config.from_env(_env(WOL_AUTH_TOKEN=token))
 
 
+@pytest.mark.parametrize("token", sorted(PUBLISHED_PLACEHOLDER_TOKENS))
+def test_config_refuses_the_published_placeholder_token(token):
+    with pytest.raises(ConfigError, match="placeholder"):
+        Config.from_env(_env(WOL_AUTH_TOKEN=token))
+
+
+def test_env_example_ships_no_token():
+    """A copied .env.example must not start a relay with a public token."""
+    lines = (Path(__file__).resolve().parent.parent / ".env.example").read_text().splitlines()
+    assert "WOL_AUTH_TOKEN=" in lines
+
+
 def test_config_accepts_a_16_character_token_with_inner_spaces():
     token = "abc def ghi jkl!"
     assert Config.from_env(_env(WOL_AUTH_TOKEN=token)).auth_token == token
@@ -244,7 +277,8 @@ def test_health_url_follows_the_listen_settings(env, url):
 
 
 def test_the_healthcheck_asks_the_address_the_relay_listens_on(monkeypatch):
-    """Real HTTP on loopback: healthcheck.py finds a relay bound to 127.0.0.2."""
+    """Real HTTP on loopback: healthcheck.py finds a relay bound to 127.0.0.2,
+    also with a proxy in the environment that would take the request away."""
     from waitress.server import create_server
 
     import healthcheck
@@ -257,6 +291,12 @@ def test_the_healthcheck_asks_the_address_the_relay_listens_on(monkeypatch):
         monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
         monkeypatch.setenv("WOL_LISTEN_HOST", "127.0.0.2")
         monkeypatch.setenv("WOL_LISTEN_PORT", str(server.effective_port))
+        for name in ("http_proxy", "HTTP_PROXY"):
+            monkeypatch.setenv(name, "http://127.0.0.1:9")  # nothing listens there
+        for name in ("no_proxy", "NO_PROXY"):
+            monkeypatch.delenv(name, raising=False)
+        # urlopen caches its opener, with the proxies of its first call.
+        monkeypatch.setattr("urllib.request._opener", None)
         assert healthcheck.main() == 0
         monkeypatch.setenv("WOL_LISTEN_HOST", "127.0.0.1")  # nothing listens there
         assert healthcheck.main() == 1
@@ -295,12 +335,35 @@ def test_a_body_that_is_not_a_json_object_is_a_400_and_wakes_nothing(client, dat
 
 
 def test_a_body_that_exhausts_the_json_parser_is_a_400(client, monkeypatch):
-    def too_deep(_raw):
+    def too_deep(_raw, **_kwargs):
         raise RecursionError
 
     monkeypatch.setattr("app.json.loads", too_deep)
     assert _post(client, b"[[[").status_code == 400
     _assert_nothing_sent(client)
+
+
+def test_a_duplicate_key_is_a_400(client):
+    response = _post(client, b'{"mac": "11:22:33:44:55:66", "mac": "aa:bb:cc:dd:ee:ff"}')
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "request body has a duplicate key"}
+    _assert_nothing_sent(client)
+
+
+@pytest.mark.parametrize(
+    "method, path, status",
+    [("get", "/health", 200), ("post", "/wol", 401), ("get", "/nowhere", 404), ("get", "/wol", 405)],
+)
+def test_every_answer_is_json_and_not_cached(client, method, path, status):
+    response = getattr(client, method)(path)
+    assert response.status_code == status
+    assert response.is_json
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_a_405_keeps_its_allow_header(client):
+    assert "POST" in client.get("/wol").headers["Allow"]
 
 
 def test_an_empty_body_uses_the_default_target(client):
@@ -357,6 +420,17 @@ def test_waitress_refuses_a_large_unauthenticated_body_before_buffering_it(confi
         thread.join(timeout=5)
 
 
+def test_main_logs_starting_first_at_any_level(monkeypatch, capsys):
+    import app as app_module
+
+    monkeypatch.setattr("waitress.serve", lambda wsgi, **kwargs: None)
+    monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
+    monkeypatch.setenv("WOL_LOG_LEVEL", "WARNING")
+    app_module.main()
+    assert '"event":"starting"' in capsys.readouterr().out.splitlines()[0]
+    assert not logging.getLogger("wol-relay").isEnabledFor(logging.INFO)
+
+
 def test_the_healthcheck_fails_on_invalid_settings(monkeypatch):
     import healthcheck
 
@@ -364,7 +438,7 @@ def test_the_healthcheck_fails_on_invalid_settings(monkeypatch):
     assert healthcheck.main() == 1
 
 
-def test_main_passes_the_body_limit_to_waitress(monkeypatch):
+def test_main_passes_the_limits_to_waitress(monkeypatch):
     import app as app_module
 
     captured = {}
@@ -372,6 +446,20 @@ def test_main_passes_the_body_limit_to_waitress(monkeypatch):
     monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
     app_module.main()
     assert captured["max_request_body_size"] == MAX_BODY_BYTES
+    assert captured["channel_timeout"] == CHANNEL_TIMEOUT_SECONDS
+    assert captured["cleanup_interval"] == CLEANUP_INTERVAL_SECONDS
+
+
+@pytest.mark.parametrize("call", ["geteuid", "getegid"])
+def test_main_refuses_to_run_as_root(monkeypatch, capsys, call):
+    import app as app_module
+
+    monkeypatch.setattr(f"app.os.{call}", lambda: 0)
+    monkeypatch.setattr("waitress.serve", lambda wsgi, **kwargs: pytest.fail("served as root"))
+    monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
+    with pytest.raises(SystemExit):
+        app_module.main()
+    assert '"event":"config_invalid"' in capsys.readouterr().out
 
 
 def _fail(client, count, address="10.0.0.1"):
