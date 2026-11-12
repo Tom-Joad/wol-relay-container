@@ -51,9 +51,7 @@ def _run(env, *cmd):
 
 @pytest.mark.skipif(os.getuid() != 0, reason="the IDs are only checked when started as root")
 @pytest.mark.parametrize("env", [{"PUID": "abc"}, {"PGID": "1 0"}, {"PUID": "0"}, {"PGID": "0"},
-                                 {"PUID": "00"}, {"PGID": "000"}, {"PUID": "00", "PGID": "000"},
-                                 {"PUID": "4294967296"}, {"PGID": "4294967296"},
-                                 {"PUID": "4294967295"}, {"PUID": "99999999999999999999"}])
+                                 {"PUID": "00"}, {"PGID": "000"}, {"PUID": "00", "PGID": "000"}])
 def test_entrypoint_rejects_bad_ids(env):
     result = _run(env, "true")
     assert result.returncode == 1

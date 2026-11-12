@@ -7,7 +7,10 @@ from pathlib import Path
 import pytest
 
 from app import (
+    CHANNEL_TIMEOUT_SECONDS,
+    CLEANUP_INTERVAL_SECONDS,
     MAX_BODY_BYTES,
+    PUBLISHED_PLACEHOLDER_TOKENS,
     Config,
     ConfigError,
     FailureThrottle,
@@ -182,9 +185,10 @@ def test_config_refuses_a_token_that_could_never_match_or_is_too_short(token):
         Config.from_env(_env(WOL_AUTH_TOKEN=token))
 
 
-def test_config_refuses_the_published_placeholder_token():
+@pytest.mark.parametrize("token", sorted(PUBLISHED_PLACEHOLDER_TOKENS))
+def test_config_refuses_the_published_placeholder_token(token):
     with pytest.raises(ConfigError, match="placeholder"):
-        Config.from_env(_env(WOL_AUTH_TOKEN="replace-with-a-long-random-secret"))
+        Config.from_env(_env(WOL_AUTH_TOKEN=token))
 
 
 def test_env_example_ships_no_token():
@@ -384,9 +388,20 @@ def test_main_passes_the_limits_to_waitress(monkeypatch):
     monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
     app_module.main()
     assert captured["max_request_body_size"] == MAX_BODY_BYTES
-    # Idle connections are closed after 10 s instead of 120 s.
-    assert captured["channel_timeout"] == 10
-    assert captured["cleanup_interval"] <= 5
+    assert captured["channel_timeout"] == CHANNEL_TIMEOUT_SECONDS
+    assert captured["cleanup_interval"] == CLEANUP_INTERVAL_SECONDS
+
+
+@pytest.mark.parametrize("call", ["geteuid", "getegid"])
+def test_main_refuses_to_run_as_root(monkeypatch, capsys, call):
+    import app as app_module
+
+    monkeypatch.setattr(f"app.os.{call}", lambda: 0)
+    monkeypatch.setattr("waitress.serve", lambda wsgi, **kwargs: pytest.fail("served as root"))
+    monkeypatch.setenv("WOL_AUTH_TOKEN", TOKEN)
+    with pytest.raises(SystemExit):
+        app_module.main()
+    assert '"event":"config_invalid"' in capsys.readouterr().out
 
 
 def _fail(client, count, address="10.0.0.1"):

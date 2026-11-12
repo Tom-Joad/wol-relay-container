@@ -136,18 +136,23 @@ BIG=$(head -c 100000 /dev/zero | tr '\0' x)
 in_log '"level":"ERROR"' && fail "an ERROR line in the log"
 in_log '"event":"auth_rejected".*"client":' || fail "auth_rejected doesn't name the client"
 
-echo "== idle connections are closed and can't shut callers out"
+echo "== idle connections are closed after 10 s"
 # Waitress takes 100 connections; 100 idle ones without a token used to block
-# every caller for two minutes. The relay closes them after 10 s.
+# every caller for two minutes. Closed after 10 s, checked every 5 s.
 docker exec -i "$NAME" python - <<'PY' || fail "/health blocked by idle connections"
 import os, socket, sys, time, urllib.request
 port = int(os.environ["WOL_LISTEN_PORT"])
 idle = [socket.create_connection(("127.0.0.1", port)) for _ in range(100)]
 for sock in idle:
     sock.sendall(b"POST /wol HTTP/1.1\r\nHost: relay\r\n")
-time.sleep(18)
-status = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5).status
-sys.exit(0 if status == 200 else 1)
+deadline = time.monotonic() + 25
+while time.monotonic() < deadline:
+    try:
+        if urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2).status == 200:
+            sys.exit(0)
+    except OSError:
+        time.sleep(0.5)
+sys.exit(1)
 PY
 
 if in_log "$TOKEN"; then fail "the token is in the log"; fi

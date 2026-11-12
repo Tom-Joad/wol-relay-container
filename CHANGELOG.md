@@ -17,7 +17,10 @@ All notable changes to this project are listed here. Versions follow
   your own token (`openssl rand -hex 32`) in the relay and in its callers.
 - Idle connections are closed after 10 seconds instead of 120. Before, 100
   idle connections, no token needed, shut out every caller and the health
-  check for two minutes.
+  check for two minutes at a time. Someone who keeps reopening them can
+  still crowd the relay out; keep it on a trusted network, as before.
+- The relay itself refuses to start as root (`config_invalid`), whatever
+  way the entrypoint's check was passed.
 
 ## [2.0.0] - 2026-11-10
 

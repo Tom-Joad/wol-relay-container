@@ -377,6 +377,10 @@ def main() -> None:
     from waitress import serve
 
     try:
+        # The entrypoint refuses IDs that would be root; this checks the
+        # outcome, so a way past that check still can't run the relay as root.
+        if os.geteuid() == 0 or os.getegid() == 0:
+            raise ConfigError("refusing to run the relay as root: set PUID and PGID to a non-zero ID")
         config = Config.from_env()
     except ConfigError as exc:
         logging_setup.configure("INFO")
