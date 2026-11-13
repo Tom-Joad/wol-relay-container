@@ -16,12 +16,18 @@ runtime. The repository contains no real values.
 
 ## Endpoints
 
-| Method | Path      | Auth              | Purpose                          |
-| ------ | --------- | ----------------- | -------------------------------- |
-| `POST` | `/wol`    | `X-Auth-Token`    | Send a magic packet              |
-| `GET`  | `/health` | none              | Liveness probe                   |
+| Method | Path            | Auth                    | Purpose             |
+| ------ | --------------- | ----------------------- | ------------------- |
+| `POST` | `/api/v1/wake`  | `Authorization: Bearer` | Send a magic packet |
+| `POST` | `/wol`          | `X-Auth-Token`          | Send a magic packet |
+| `GET`  | `/health`       | none                    | Liveness probe      |
 
-`POST /wol` accepts an optional JSON body. Without one, the magic packet goes
+`/api/v1/wake` and `/wol` do the same and take the same token
+(`WOL_AUTH_TOKEN`); each path accepts only its own header. `/wol` stays for
+existing callers; new callers should use `/api/v1/wake`. A caller can move
+from one to the other at any time, nothing on the relay changes.
+
+Both accept an optional JSON body. Without one, the magic packet goes
 to `WOL_TARGET_MAC`:
 
 ```json
@@ -39,7 +45,7 @@ per-request overrides and pin the relay to its configured target.
 | ------ | -------------------------------------------------------------- |
 | `200`  | Packet sent — body echoes `mac`, `broadcast` and `port`         |
 | `400`  | Body that isn't a JSON object (or sent without `Content-Type: application/json`), a key given twice, invalid MAC, or no target configured/supplied |
-| `401`  | Missing or wrong `X-Auth-Token`                                 |
+| `401`  | Missing or wrong token (`/api/v1/wake` adds `WWW-Authenticate: Bearer`) |
 | `413`  | Request body larger than 4 KiB                                  |
 | `429`  | Too many wrong tokens from this client address; see `Retry-After` |
 | `502`  | The datagram could not be sent (socket error)                   |
@@ -85,7 +91,7 @@ docker mods): the relay is stateless, and the small Alpine image keeps
 
 | Variable                | Required | Default           | Description                                                        |
 | ----------------------- | -------- | ----------------- | ------------------------------------------------------------------ |
-| `WOL_AUTH_TOKEN`        | yes      | —                 | Shared secret expected in the `X-Auth-Token` header: 16 or more printable ASCII characters, no leading or trailing whitespace |
+| `WOL_AUTH_TOKEN`        | yes      | —                 | Shared secret expected as the bearer token (`/api/v1/wake`) or in the `X-Auth-Token` header (`/wol`): 16 or more printable ASCII characters, no leading or trailing whitespace |
 | `WOL_TARGET_MAC`        | no\*     | —                 | Default target MAC address                                          |
 | `WOL_ALLOW_BODY_MAC`    | no       | `true`            | Allow `{"mac": "..."}` in the request body to override the target   |
 | `WOL_BROADCAST_ADDRESS` | no       | `255.255.255.255` | Broadcast destination; a subnet broadcast also works                |
@@ -158,13 +164,19 @@ base-image CVE cannot block a fix from shipping.
 ## Example request
 
 ```bash
-curl -sS -X POST http://HOST_ADDRESS:8099/wol \
-  -H "X-Auth-Token: $WOL_AUTH_TOKEN" \
+curl -sS -X POST http://HOST_ADDRESS:8099/api/v1/wake \
+  -H "Authorization: Bearer $WOL_AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"mac": "aa:bb:cc:dd:ee:ff"}'
 ```
 
 Using the configured default target instead:
+
+```bash
+curl -sS -X POST http://HOST_ADDRESS:8099/api/v1/wake -H "Authorization: Bearer $WOL_AUTH_TOKEN"
+```
+
+The same with the older form:
 
 ```bash
 curl -sS -X POST http://HOST_ADDRESS:8099/wol -H "X-Auth-Token: $WOL_AUTH_TOKEN"
@@ -176,8 +188,8 @@ Put the secret in `secrets.yaml` rather than in `configuration.yaml`:
 
 ```yaml
 # secrets.yaml
-wol_relay_url: "http://HOST_ADDRESS:8099/wol"
-wol_relay_token: "YOUR_SHARED_SECRET"
+wol_relay_url: "http://HOST_ADDRESS:8099/api/v1/wake"
+wol_relay_auth: "Bearer YOUR_SHARED_SECRET"
 ```
 
 ```yaml
@@ -187,13 +199,15 @@ rest_command:
     url: !secret wol_relay_url
     method: POST
     headers:
-      X-Auth-Token: !secret wol_relay_token
+      Authorization: !secret wol_relay_auth
       Content-Type: application/json
     payload: '{"mac": "AA:BB:CC:DD:EE:FF"}'
     verify_ssl: false
 ```
 
-Omit `payload` to fall back to `WOL_TARGET_MAC`. The command then becomes
+A `rest_command` that still sends `X-Auth-Token` to `/wol` keeps working;
+to move it, change the URL and the header together. Omit `payload` to fall
+back to `WOL_TARGET_MAC`. The command then becomes
 available as the `rest_command.wake_target` action in automations and scripts.
 
 ## Upgrading from 1.x
