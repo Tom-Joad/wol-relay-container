@@ -39,7 +39,7 @@ wait_healthy() {
 }
 
 # An HTTP request from inside the container; prints the status code.
-request() { # method path [token] [json body]
+request() { # method path [token] [json body]; /api/ paths send the token as a bearer token
     docker exec -i "$NAME" python - "$@" <<'PY'
 import os, sys, urllib.error, urllib.request
 method, path = sys.argv[1], sys.argv[2]
@@ -47,7 +47,12 @@ token = sys.argv[3] if len(sys.argv) > 3 else ""
 body = sys.argv[4].encode() if len(sys.argv) > 4 else None
 req = urllib.request.Request(
     f"http://127.0.0.1:{os.environ['WOL_LISTEN_PORT']}{path}", data=body, method=method,
-    headers={"Content-Type": "application/json", **({"X-Auth-Token": token} if token else {})})
+    headers={"Content-Type": "application/json"})
+if token:
+    if path.startswith("/api/"):
+        req.add_header("Authorization", f"Bearer {token}")
+    else:
+        req.add_header("X-Auth-Token", token)
 try:
     print(urllib.request.urlopen(req, timeout=5).status)
 except urllib.error.HTTPError as exc:
@@ -136,6 +141,8 @@ echo "== endpoints"
 [[ $(request POST /wol "$TOKEN" '{"mac":"not-a-mac"}') == 400 ]] || fail "invalid MAC isn't 400"
 [[ $(request POST /wol "$TOKEN" '{"mac":"00:11:22:33:44:55"}') == 200 ]] || fail "valid request isn't 200"
 in_log '"event":"packet_sent"' || fail "no packet_sent in the log"
+[[ $(request POST /api/v1/wake) == 401 ]] || fail "/api/v1/wake without token isn't 401"
+[[ $(request POST /api/v1/wake "$TOKEN" '{"mac":"00:11:22:33:44:55"}') == 200 ]] || fail "/api/v1/wake with a bearer token isn't 200"
 [[ $(request POST /wol "$TOKEN" '{"mac":"11:22:33:44:55:66"') == 400 ]] || fail "truncated JSON isn't 400"
 BIG=$(head -c 100000 /dev/zero | tr '\0' x)
 [[ $(request POST /wol "" "$BIG") == 413 ]] || fail "a large body without token isn't 413"

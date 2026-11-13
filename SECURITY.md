@@ -18,7 +18,7 @@ The relay holds a shared secret and can wake any host on its network segment,
 so the following are of particular interest:
 
 - the auth token ending up in logs or responses
-- a way to send a packet without a valid `X-Auth-Token`
+- a way to send a packet without a valid token (`Authorization: Bearer` or `X-Auth-Token`)
 - a way around `WOL_ALLOW_BODY_MAC=false`
 
 The relay speaks plain HTTP. It counts wrong tokens per client address and

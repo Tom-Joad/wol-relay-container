@@ -3,6 +3,15 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `POST /api/v1/wake` with `Authorization: Bearer <token>` does the same as
+  `POST /wol` with `X-Auth-Token`: same token, same body, same answers, and
+  wrong tokens on either path count towards the same lock-out. `/wol` stays
+  unchanged, so callers can move one at a time. The README's examples and
+  the Home Assistant `rest_command` use the new form.
+
 ## [3.0.0] - 2026-11-12
 
 ### Changed
@@ -198,6 +207,7 @@ a change that needs action when upgrading only comes with a new major version.
 - CI: actions updated to their Node 24 releases; the test job gets
   `pull-requests: read` so gitleaks works on pull requests.
 
+[Unreleased]: https://github.com/Tom-Joad/wol-relay-container/compare/v3.0.0...HEAD
 [3.0.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.8...v2.0.0
 [1.0.8]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.7...v1.0.8

@@ -547,3 +547,73 @@ def test_throttle_caps_the_number_of_tracked_addresses():
     for address in "abcdef":
         throttle.attempt(address)
     assert len(throttle._failures) <= 3
+
+
+def test_the_api_wakes_with_a_bearer_token(client):
+    response = client.post(
+        "/api/v1/wake", headers={"Authorization": f"Bearer {TOKEN}"}, json={"mac": "11:22:33:44:55:66"}
+    )
+    assert response.status_code == 200
+    assert response.get_json()["mac"] == "11:22:33:44:55:66"
+    assert client.application.config["SENT"] == [("11:22:33:44:55:66", "255.255.255.255", 9)]
+
+
+def test_the_api_without_a_body_wakes_the_default_target(client):
+    response = client.post("/api/v1/wake", headers={"Authorization": f"bearer {TOKEN}"})
+    assert response.status_code == 200
+    assert client.application.config["SENT"] == [(MAC, "255.255.255.255", 9)]
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"Authorization": "Bearer wrong-token-0123456789"},
+        {"Authorization": f"Basic {TOKEN}"},
+        {"Authorization": TOKEN},
+        {"X-Auth-Token": TOKEN},  # each path takes its own form only
+    ],
+)
+def test_the_api_refuses_anything_but_the_right_bearer_token(client, headers):
+    response = client.post("/api/v1/wake", headers=headers)
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "unauthorized"}
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+    assert response.headers["Cache-Control"] == "no-store"
+    _assert_nothing_sent(client)
+
+
+def test_wol_does_not_take_a_bearer_token(client):
+    response = client.post("/wol", headers={"Authorization": f"Bearer {TOKEN}"})
+    assert response.status_code == 401
+    assert "WWW-Authenticate" not in response.headers
+    _assert_nothing_sent(client)
+
+
+def test_the_api_checks_the_body_like_wol(client):
+    response = client.post(
+        "/api/v1/wake",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+        data='{"mac": "a", "mac": "b"}',
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    _assert_nothing_sent(client)
+
+
+def test_both_paths_share_the_throttle_and_log_their_path(client, caplog):
+    with caplog.at_level(logging.WARNING, logger="wol-relay"):
+        assert _fail(client, 19) == [401] * 19
+        last = client.post(
+            "/api/v1/wake",
+            headers={"Authorization": "Bearer wrong"},
+            environ_base={"REMOTE_ADDR": "10.0.0.1"},
+        )
+    assert last.status_code == 401
+    assert [r.path for r in caplog.records if r.getMessage() == "auth_rejected"][-1] == "/api/v1/wake"
+    blocked = client.post(
+        "/api/v1/wake",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+        environ_base={"REMOTE_ADDR": "10.0.0.1"},
+    )
+    assert blocked.status_code == 429

@@ -29,6 +29,12 @@ VERSION = "3.0.0"
 
 AUTH_HEADER = "X-Auth-Token"
 
+# The two forms of the same trigger: /wol with the X-Auth-Token header, which
+# existing callers send, and the versioned API with a bearer token, so a
+# caller can move without both ends switching at once. Same token for both.
+WOL_PATH = "/wol"
+API_WAKE_PATH = "/api/v1/wake"
+
 MIN_TOKEN_LENGTH = 16
 
 # Placeholders the repository has shipped in .env.example. They are public,
@@ -273,8 +279,18 @@ def create_app(config: Config | None = None) -> Flask:
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 
-    @app.post("/wol")
-    def wake():
+    @app.post(WOL_PATH)
+    def wake_legacy():
+        return wake(request.headers.get(AUTH_HEADER, ""), WOL_PATH)
+
+    @app.post(API_WAKE_PATH)
+    def wake_api():
+        response, status = wake(_bearer_token(), API_WAKE_PATH)
+        if status == 401:
+            response.headers["WWW-Authenticate"] = "Bearer"
+        return response, status
+
+    def wake(presented: str, path: str):
         client = request.remote_addr or "unknown"
         retry_after, first = throttle.attempt(client)
         if retry_after:
@@ -283,8 +299,8 @@ def create_app(config: Config | None = None) -> Flask:
             response = jsonify(error="too many failed attempts")
             response.headers["Retry-After"] = str(retry_after)
             return response, 429
-        if not _authorized(config.auth_token):
-            LOG.warning("auth_rejected", extra={"path": "/wol", "client": client})
+        if not _authorized(presented, config.auth_token):
+            LOG.warning("auth_rejected", extra={"path": path, "client": client})
             return jsonify(error="unauthorized"), 401
         throttle.succeeded(client)
 
@@ -377,13 +393,18 @@ def _unique_keys(pairs: list[tuple[str, object]]) -> dict:
     return body
 
 
-def _authorized(expected_token: str) -> bool:
+def _bearer_token() -> str:
+    """The token of an ``Authorization: Bearer`` header, "" for any other."""
+    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+    return token.strip() if scheme.lower() == "bearer" else ""
+
+
+def _authorized(presented: str, expected_token: str) -> bool:
     # Compared as bytes: compare_digest refuses str with non-ASCII
     # characters, and a header with an umlaut would end in a 500 instead
     # of a 401. WSGI decodes header values as latin-1, so that is the way
     # back to the bytes the client sent. The configured token is printable
     # ASCII (checked at start), so a non-ASCII byte can never match.
-    presented = request.headers.get(AUTH_HEADER, "")
     return hmac.compare_digest(presented.encode("latin-1", "replace"), expected_token.encode("ascii"))
 
 
