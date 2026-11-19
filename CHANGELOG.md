@@ -3,6 +3,12 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [3.1.1] - 2026-11-19
+
+### Security
+- Security updates of the distribution packages, picked up by rebuilding the image:
+  - `libssl3` 3.5.9-r1 (CVE-2026-107496, CVE-2026-88822, CVE-2026-88823, CVE-2026-95691, CVE-2026-95692)
+
 ## [3.1.0] - 2026-11-13
 
 ### Added
@@ -207,6 +213,7 @@ a change that needs action when upgrading only comes with a new major version.
 - CI: actions updated to their Node 24 releases; the test job gets
   `pull-requests: read` so gitleaks works on pull requests.
 
+[3.1.1]: https://github.com/Tom-Joad/wol-relay-container/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v1.0.8...v2.0.0
