@@ -3,6 +3,12 @@
 All notable changes to this project are listed here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [3.1.2] - 2026-11-22
+
+### Changed
+- Updated dependencies:
+  - python from 3.14-alpine to 3.15-alpine
+
 ## [3.1.1] - 2026-11-19
 
 ### Security
@@ -213,6 +219,7 @@ a change that needs action when upgrading only comes with a new major version.
 - CI: actions updated to their Node 24 releases; the test job gets
   `pull-requests: read` so gitleaks works on pull requests.
 
+[3.1.2]: https://github.com/Tom-Joad/wol-relay-container/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/Tom-Joad/wol-relay-container/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/Tom-Joad/wol-relay-container/compare/v2.0.0...v3.0.0
